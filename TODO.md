@@ -4705,3 +4705,5 @@ t019.3.4,Update AGENTS.md with Beads integration docs,,beads,1h,45m,2025-12-21T1
 - [ ] t18171 Fix Cloudron 7.0.4 versions update option parsing #bug ref:GH#28556
 
 - [x] t18172 Document Cloudron package repository metadata #documentation ref:GH#28559 pr:#28561 completed:2026-07-24
+
+- [ ] t18173 Exclude operational review comments from consolidation counts #bug ref:GH#28575
