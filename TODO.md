@@ -4708,4 +4708,4 @@ t019.3.4,Update AGENTS.md with Beads integration docs,,beads,1h,45m,2025-12-21T1
 
 - [ ] t18173 Exclude operational review comments from consolidation counts #bug ref:GH#28575
 
-- [ ] t18174 Fix Bash 3.2 issue-sync shim PATH precedence regression #auto-dispatch #bug ref:GH#28577
+- [x] t18174 Fix Bash 3.2 issue-sync shim PATH precedence regression #auto-dispatch #bug ref:GH#28577 pr:#28578 completed:2026-07-24
