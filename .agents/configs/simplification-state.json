@@ -7480,9 +7480,9 @@
       "pr": 16415
     },
     "TODO.md": {
-      "at": "2026-07-24T06:06:41Z",
-      "hash": "4e23a7534a80d7b723404f448741222808cf6c18",
-      "passes": 198,
+      "at": "2026-07-24T18:15:21Z",
+      "hash": "025718cd711a41f319b16d90533fe64915d43a2b",
+      "passes": 199,
       "pr": 15490
     },
     "aidevops.sh": {
@@ -7624,10 +7624,10 @@
       "passes": 2
     },
     ".agents/reference/opencode-maintenance.md": {
-      "hash": "c732cdcaea8aa25382b2ae0929475ec80e90fe18",
-      "at": "2026-07-18T15:39:02Z",
+      "hash": "a6fb4174be9398204eaaf844ecfb67089189403c",
+      "at": "2026-07-24T18:14:21Z",
       "pr": 20109,
-      "passes": 9
+      "passes": 10
     },
     ".agents/reference/observability.md": {
       "hash": "03ae36b296c340e3652b177daf78d7135dc3a67c",
@@ -7768,10 +7768,10 @@
       "passes": 8
     },
     ".agents/scripts/pulse-dispatch-worker-launch.sh": {
-      "hash": "d3f4e38e62fea5610d123f59c7562f4e25290d4c",
-      "at": "2026-07-24T06:05:38Z",
+      "hash": "e26495d7521fe4ef990a514211c0d3d2688baad3",
+      "at": "2026-07-24T18:14:30Z",
       "pr": 20617,
-      "passes": 45
+      "passes": 46
     },
     ".agents/reference/dispatch-blockers.md": {
       "hash": "a474d553d1a257317c034d9071bf0b1ae4358725",
