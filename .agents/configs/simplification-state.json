@@ -2316,9 +2316,9 @@
       "pr": 18843
     },
     ".agents/scripts/issue-sync-helper.sh": {
-      "at": "2026-07-18T15:45:26Z",
-      "hash": "6b1f11c862b525b84bd9585038b02573a3d3ce4c",
-      "passes": 31,
+      "at": "2026-07-24T19:19:48Z",
+      "hash": "f81772b99b65e8a8d39a3fce634e1074c7fb743d",
+      "passes": 32,
       "pr": 18706
     },
     ".agents/scripts/issue-sync-lib.sh": {
@@ -7480,9 +7480,9 @@
       "pr": 16415
     },
     "TODO.md": {
-      "at": "2026-07-24T18:15:21Z",
-      "hash": "025718cd711a41f319b16d90533fe64915d43a2b",
-      "passes": 199,
+      "at": "2026-07-24T19:20:41Z",
+      "hash": "aee2fe2a9b0af974e987e23048db52b645f37da3",
+      "passes": 200,
       "pr": 15490
     },
     "aidevops.sh": {
