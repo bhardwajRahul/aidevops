@@ -47,20 +47,24 @@ function cleanText(value, maxLength, options = {}) {
   return text.slice(0, maxLength);
 }
 
-function cleanIssueNumber(value) {
+export function cleanWorkerBlockerIssueNumber(value) {
   const text = String(value ?? "");
   if (!/^[0-9]+$/.test(text)) return null;
   const parsed = Number(text);
   return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
-function resolveLogPath(options = {}) {
+export function normalizeWorkerBlockerRepoSlug(value, options = {}) {
+  return cleanText(value || "", MAX_FIELD_LENGTH, options).toLowerCase();
+}
+
+export function resolveWorkerBlockerLogPath(options = {}) {
   return options.logPath
     || process.env.AIDEVOPS_WORKER_BLOCKER_LOG_FILE
     || resolve(homedir(), ".aidevops", "logs", "worker-progress-blockers.jsonl");
 }
 
-function resolveMaxBytes(options = {}) {
+export function resolveWorkerBlockerMaxBytes(options = {}) {
   const raw = options.maxBytes ?? process.env.AIDEVOPS_WORKER_BLOCKER_LOG_MAX_BYTES;
   const parsed = Number(raw || DEFAULT_WORKER_BLOCKER_LOG_MAX_BYTES);
   if (!Number.isSafeInteger(parsed) || parsed < MIN_LOG_MAX_BYTES) {
@@ -71,7 +75,7 @@ function resolveMaxBytes(options = {}) {
 
 export function normalizeWorkerBlockerEvent(input = {}, options = {}) {
   const now = options.now instanceof Date ? options.now : new Date();
-  const issueNumber = cleanIssueNumber(input.issue_number ?? process.env.WORKER_ISSUE_NUMBER);
+  const issueNumber = cleanWorkerBlockerIssueNumber(input.issue_number ?? process.env.WORKER_ISSUE_NUMBER);
   const grantable = typeof input.grantable === "boolean" ? input.grantable : null;
   return {
     schema: WORKER_BLOCKER_SCHEMA,
@@ -83,7 +87,7 @@ export function normalizeWorkerBlockerEvent(input = {}, options = {}) {
     blocking: input.blocking !== false,
     source: cleanText(input.source || "unknown", MAX_FIELD_LENGTH, options),
     issue_number: issueNumber,
-    repo_slug: cleanText(input.repo_slug || process.env.WORKER_REPO_SLUG || process.env.DISPATCH_REPO_SLUG || "", MAX_FIELD_LENGTH, options).toLowerCase(),
+    repo_slug: normalizeWorkerBlockerRepoSlug(input.repo_slug || process.env.WORKER_REPO_SLUG || process.env.DISPATCH_REPO_SLUG || "", options),
     session_key: cleanText(input.session_key || process.env.WORKER_SESSION_KEY || "", MAX_FIELD_LENGTH, options),
     request_id: cleanText(input.request_id || process.env.AIDEVOPS_PERMISSION_REQUEST_ID || "", MAX_FIELD_LENGTH, options),
     permission: cleanText(input.permission || "", 100, options),
@@ -120,30 +124,35 @@ function trimBeforeAppend(logPath, incomingBytes, maxBytes) {
   renameSync(temporary, logPath);
 }
 
+export function appendNormalizedWorkerBlockerEventsUnlocked(logPath, inputs, options, maxBytes) {
+  const content = inputs
+    .map((input) => `${JSON.stringify(normalizeWorkerBlockerEvent(input, options))}\n`)
+    .join("");
+  const incomingBytes = Buffer.byteLength(content);
+  if (!content || incomingBytes > maxBytes) return false;
+  trimBeforeAppend(logPath, incomingBytes, maxBytes);
+  const descriptor = openSync(logPath, constants.O_APPEND | constants.O_CREAT | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+  try {
+    writeFileSync(descriptor, content);
+    fchmodSync(descriptor, 0o600);
+  } finally {
+    closeSync(descriptor);
+  }
+  return true;
+}
+
 export function appendWorkerBlockerEvent(input, options = {}) {
   let lockPath = "";
   let lockToken = "";
   try {
-    const logPath = resolveLogPath(options);
-    const maxBytes = resolveMaxBytes(options);
-    const line = `${JSON.stringify(normalizeWorkerBlockerEvent(input, options))}\n`;
-    const incomingBytes = Buffer.byteLength(line);
-    if (incomingBytes > maxBytes) return false;
-
+    const logPath = resolveWorkerBlockerLogPath(options);
+    const maxBytes = resolveWorkerBlockerMaxBytes(options);
     mkdirSync(dirname(logPath), { recursive: true, mode: 0o700 });
     if (existsSync(logPath) && lstatSync(logPath).isSymbolicLink()) return false;
     lockPath = `${logPath}.lock`;
     lockToken = acquireLock(lockPath);
     if (!lockToken) return false;
-    trimBeforeAppend(logPath, incomingBytes, maxBytes);
-    const descriptor = openSync(logPath, constants.O_APPEND | constants.O_CREAT | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
-    try {
-      writeFileSync(descriptor, line);
-      fchmodSync(descriptor, 0o600);
-    } finally {
-      closeSync(descriptor);
-    }
-    return true;
+    return appendNormalizedWorkerBlockerEventsUnlocked(logPath, [input], options, maxBytes);
   } catch {
     return false;
   } finally {
@@ -181,13 +190,27 @@ function parseCliArguments(argv) {
   return { event, options };
 }
 
-function main() {
+async function main() {
   const [command, ...args] = process.argv.slice(2);
-  if (command !== "append") return 2;
   const { event, options } = parseCliArguments(args);
-  return appendWorkerBlockerEvent(event, options) ? 0 : 1;
+  if (command === "append") return appendWorkerBlockerEvent(event, options) ? 0 : 1;
+  if (command === "resolve-issue") {
+    const { resolveWorkerBlockersForIssue } = await import("./worker-blocker-reconcile.mjs");
+    const result = resolveWorkerBlockersForIssue(event, options);
+    if (result.ok) process.stdout.write(`${result.resolvedCount}\n`);
+    return result.ok ? 0 : 1;
+  }
+  if (command === "list-active-issues") {
+    const { listActiveWorkerBlockerIssues } = await import("./worker-blocker-reconcile.mjs");
+    const result = listActiveWorkerBlockerIssues(event, options);
+    if (result.ok && result.issues.length > 0) process.stdout.write(`${result.issues.join("\n")}\n`);
+    return result.ok ? 0 : 1;
+  }
+  return 2;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exitCode = main();
+  main()
+    .then((exitCode) => { process.exitCode = exitCode; })
+    .catch(() => { process.exitCode = 1; });
 }
