@@ -4713,3 +4713,5 @@ t019.3.4,Update AGENTS.md with Beads integration docs,,beads,1h,45m,2025-12-21T1
 - [x] t18174 Fix Bash 3.2 issue-sync shim PATH precedence regression #auto-dispatch #bug ref:GH#28577 pr:#28578 completed:2026-07-24
 
 - [ ] t18175 Clarify self-improvement auto-dispatch authority boundary #documentation ref:GH#28582
+
+- [ ] t18176 Plan secure personal and shared social knowledge corpora #enhancement #framework #knowledge #parent #security ref:GH#28587
