@@ -240,9 +240,9 @@
       "pr": 11004
     },
     ".agents/aidevops/setup.md": {
-      "at": "2026-07-06T03:32:19Z",
-      "hash": "e993804ea78f35dd26615984f66188f06c1ede95",
-      "passes": 3,
+      "at": "2026-07-25T18:50:21Z",
+      "hash": "65d0f87424888995c1fd31f18c0ddd83fb903113",
+      "passes": 4,
       "pr": 16749
     },
     ".agents/aidevops/troubleshooting.md": {
@@ -1952,9 +1952,9 @@
       "pr": 16797
     },
     ".agents/scripts/commands/full-loop.md": {
-      "at": "2026-07-24T00:52:07Z",
-      "hash": "2c197c70a909da3e2305e07c495ae69c754b2135",
-      "passes": 38,
+      "at": "2026-07-25T18:50:39Z",
+      "hash": "d3a470d500584d798e8fd4f29ed2ec564a137579",
+      "passes": 39,
       "pr": 14590
     },
     ".agents/scripts/commands/init-routines.md": {
@@ -2268,9 +2268,9 @@
       "pr": 19046
     },
     ".agents/scripts/generate-claude-commands.sh": {
-      "at": "2026-07-25T03:38:14Z",
-      "hash": "62fd046b1edd3f4c165d14b1d89a1131b751f87a",
-      "passes": 9,
+      "at": "2026-07-25T18:50:43Z",
+      "hash": "9dbc75d45624e9a076798700a908a85e460fe6ff",
+      "passes": 10,
       "pr": 17571
     },
     ".agents/scripts/generate-opencode-agents.sh": {
@@ -7193,9 +7193,9 @@
       "pr": 13065
     },
     ".agents/workflows/full-loop.md": {
-      "at": "2026-07-24T00:53:01Z",
-      "hash": "2c197c70a909da3e2305e07c495ae69c754b2135",
-      "passes": 27,
+      "at": "2026-07-25T18:51:41Z",
+      "hash": "d3a470d500584d798e8fd4f29ed2ec564a137579",
+      "passes": 28,
       "pr": 19047
     },
     ".agents/workflows/git-workflow.md": {
@@ -7366,9 +7366,9 @@
       "pr": 18242
     },
     ".agents/workflows/review-issue-pr.md": {
-      "at": "2026-07-23T23:47:05Z",
-      "hash": "0f49d3c87af293553ac33939f3e01822b038ec60",
-      "passes": 13,
+      "at": "2026-07-25T18:51:42Z",
+      "hash": "795f877bd169a84ad23d7876e0065cf1b60e8d64",
+      "passes": 14,
       "pr": 12308
     },
     ".agents/workflows/routine.md": {
@@ -7438,9 +7438,9 @@
       "pr": 18213
     },
     ".agents/workflows/triage-review.md": {
-      "at": "2026-07-25T03:39:06Z",
-      "hash": "39252782399379cef127f5e0dbd6dc1541d90c44",
-      "passes": 9,
+      "at": "2026-07-25T18:51:43Z",
+      "hash": "98360a3f21251a1e677a54c7879c9ebb21585a5d",
+      "passes": 10,
       "pr": 17494
     },
     ".agents/workflows/ui-verification.md": {
@@ -7480,9 +7480,9 @@
       "pr": 16415
     },
     "TODO.md": {
-      "at": "2026-07-25T16:34:50Z",
-      "hash": "e536bb4f066c978b82bbe65eea30a797ce55c08e",
-      "passes": 203,
+      "at": "2026-07-25T18:51:43Z",
+      "hash": "f21222a55b024ce906493b8460f15a8c29479b45",
+      "passes": 204,
       "pr": 15490
     },
     "aidevops.sh": {
@@ -7492,9 +7492,9 @@
       "pr": 19029
     },
     "setup.sh": {
-      "at": "2026-07-25T17:44:39Z",
-      "hash": "e1933273d9cbf6877ad9ab87d00f13f728423d0d",
-      "passes": 297,
+      "at": "2026-07-25T18:51:43Z",
+      "hash": "08c7c085c715cf962ed8d60ccce71eac0b9b8b9f",
+      "passes": 298,
       "pr": 15470
     },
     "todo/tasks/GH#15363-brief.md": {
@@ -7780,10 +7780,10 @@
       "passes": 4
     },
     ".agents/reference/plist-env-overrides.md": {
-      "hash": "c9d57b63e21375eaa59e2bc627f577f13272780d",
-      "at": "2026-07-18T15:39:07Z",
+      "hash": "f78433942b15e81844435994f3b57056709390f0",
+      "at": "2026-07-25T18:50:36Z",
       "pr": 20699,
-      "passes": 2
+      "passes": 3
     },
     ".agents/reference/reusable-workflows.md": {
       "hash": "ccc6c89dc9d6556569d4dc8ae485fb77ed7e39ba",
