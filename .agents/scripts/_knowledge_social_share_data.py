@@ -34,6 +34,14 @@ SNAPSHOT_VERSION = 1
 MAX_RAW_BATCH_BYTES = 64 * 1024 * 1024
 MAX_BATCHES = 10_000
 MAX_TABLE_ROWS = 1_000_000
+LOCAL_ONLY_TABLES = frozenset(
+    {
+        "outbound_operations",
+        "outbound_approvals",
+        "outbound_attempts",
+        "notification_state",
+    }
+)
 TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "connections": (
         "connection_id",
@@ -247,6 +255,11 @@ DELETE_STATEMENTS = (
     "DELETE FROM accounts",
     "DELETE FROM connections",
 )
+DELETED_TABLES = frozenset(statement.rsplit(" ", 1)[-1] for statement in DELETE_STATEMENTS)
+if not LOCAL_ONLY_TABLES.isdisjoint(TABLE_COLUMNS) or not LOCAL_ONLY_TABLES.isdisjoint(
+    DELETED_TABLES
+):
+    raise RuntimeError("local social operation state cannot enter or be erased by sharing")
 
 
 def _rows(connection: Any, table: str) -> list[dict[str, Any]]:
