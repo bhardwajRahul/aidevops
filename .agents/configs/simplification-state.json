@@ -2310,9 +2310,9 @@
       "pr": 18707
     },
     ".agents/scripts/interactive-session-helper.sh": {
-      "at": "2026-07-18T15:45:25Z",
-      "hash": "573010e02812ef79055be330185c2b65e1466bef",
-      "passes": 18,
+      "at": "2026-07-25T15:27:55Z",
+      "hash": "646bb342c91c8f50a201caae705b6f31377831e3",
+      "passes": 19,
       "pr": 18843
     },
     ".agents/scripts/issue-sync-helper.sh": {
