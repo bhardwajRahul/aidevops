@@ -2298,9 +2298,9 @@
       "pr": 13021
     },
     ".agents/scripts/headless-runtime-helper.sh": {
-      "at": "2026-07-22T03:06:56Z",
-      "hash": "bae3740ff518067a7a4a49f98abe9510b27b6241",
-      "passes": 74,
+      "at": "2026-07-25T05:51:34Z",
+      "hash": "7fad25cb3f713f8137bea5a1f7994415de059acc",
+      "passes": 75,
       "pr": 15086
     },
     ".agents/scripts/headless-runtime-lib.sh": {
@@ -7768,10 +7768,10 @@
       "passes": 8
     },
     ".agents/scripts/pulse-dispatch-worker-launch.sh": {
-      "hash": "e26495d7521fe4ef990a514211c0d3d2688baad3",
-      "at": "2026-07-24T18:14:30Z",
+      "hash": "30a81ac2b93fc235a329c59cfa640648b810db71",
+      "at": "2026-07-25T05:51:35Z",
       "pr": 20617,
-      "passes": 46
+      "passes": 47
     },
     ".agents/reference/dispatch-blockers.md": {
       "hash": "a474d553d1a257317c034d9071bf0b1ae4358725",
@@ -7852,10 +7852,10 @@
       "passes": 2
     },
     ".agents/scripts/tests/test-dispatch-claim-helper.sh": {
-      "hash": "d4697b51e3d47ec1d98b10d877bdfa8108ef0267",
-      "at": "2026-07-12T05:41:24Z",
+      "hash": "b3e97600460fba63096b7ff14a58aa1a23d64750",
+      "at": "2026-07-25T05:51:38Z",
       "pr": 26050,
-      "passes": 2
+      "passes": 3
     },
     ".agents/scripts/worktree-clean-lib.sh": {
       "hash": "421bd0d0add7976f541d5b90d5a54460ae3289e7",
@@ -8050,10 +8050,10 @@
       "passes": 3
     },
     ".agents/scripts/headless-runtime-worker.sh": {
-      "hash": "3e0720729fc5b5fc8a8d362270acbcc418c0a32a",
-      "at": "2026-07-22T04:14:00Z",
+      "hash": "d2140272ee1e7060080b3353571e841dca334383",
+      "at": "2026-07-25T05:51:34Z",
       "pr": 26521,
-      "passes": 15
+      "passes": 16
     },
     ".agents/scripts/install-hooks-helper.sh": {
       "hash": "0fa74195f7243ea22d952d156e4faccb1bbc2125",
@@ -8080,16 +8080,16 @@
       "passes": 2
     },
     ".agents/scripts/dispatch-dedup-stale.sh": {
-      "hash": "11186bc51d5a63cc7f0aaa8a58a7d4372aa8e185",
-      "at": "2026-07-21T22:55:03Z",
+      "hash": "c4903943b7ba7290ff30b6c11632cd4fb090c18f",
+      "at": "2026-07-25T05:51:33Z",
       "pr": 26555,
-      "passes": 7
+      "passes": 8
     },
     ".agents/scripts/headless-runtime-failure.sh": {
-      "hash": "b7571df40b25615442bfdad8f200f65a7bdc751c",
-      "at": "2026-07-21T22:55:04Z",
+      "hash": "70cf4211b1c97861d9b0e10b925213f7369bc433",
+      "at": "2026-07-25T05:51:33Z",
       "pr": 26623,
-      "passes": 9
+      "passes": 10
     },
     ".agents/scripts/gh-failure-miner-helper.sh": {
       "hash": "a4ed111ba2630eff5f153d2f353ea5e727dcf819",
