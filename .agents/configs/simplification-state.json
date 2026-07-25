@@ -7480,9 +7480,9 @@
       "pr": 16415
     },
     "TODO.md": {
-      "at": "2026-07-25T18:51:43Z",
-      "hash": "f21222a55b024ce906493b8460f15a8c29479b45",
-      "passes": 204,
+      "at": "2026-07-25T19:57:38Z",
+      "hash": "2b9c2fe49d1695f951f6650c84c9f3925ae59045",
+      "passes": 205,
       "pr": 15490
     },
     "aidevops.sh": {
@@ -7960,10 +7960,10 @@
       "passes": 1
     },
     ".agents/scripts/tests/test-full-loop-merge.sh": {
-      "hash": "9a539a19553bcb2d20ec0a32d1223c81ffefd7a7",
-      "at": "2026-07-25T16:33:55Z",
+      "hash": "cae8d79a7b18d1842c7b1be222b6aeff68e2830a",
+      "at": "2026-07-25T19:56:41Z",
       "pr": 25930,
-      "passes": 7
+      "passes": 8
     },
     ".agents/scripts/tests/test-gh-wrapper-rest-fallback.sh": {
       "hash": "386117d315c69e062d599a6a05e0155df6bab229",
