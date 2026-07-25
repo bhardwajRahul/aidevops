@@ -7,6 +7,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_HELPER="${SCRIPT_DIR}/knowledge_social_import.py"
+X_HELPER="${SCRIPT_DIR}/knowledge_social_x.py"
 
 usage() {
 	cat <<'EOF'
@@ -15,6 +16,9 @@ Usage:
   knowledge-social-helper.sh import-archive [--base PATH] [--alias ALIAS] --archive FILE
   knowledge-social-helper.sh rebuild [--base PATH] [--alias ALIAS]
   knowledge-social-helper.sh coverage [--base PATH] [--alias ALIAS]
+  knowledge-social-helper.sh sync-x [--base PATH] [--alias ALIAS] \
+    --connection-id ID --account-id ID --stream STREAM [--budget UNITS] \
+    [--media-policy none|metadata] [--app PROFILE] [--username HANDLE]
 
 The authenticated corpus catalog resolves ALIAS with knowledge.write for
 mutating operations or knowledge.read for coverage. Physical corpus paths are
@@ -25,6 +29,12 @@ Archive format:
   objects, activities, media, and coverage. IDs must be provider-stable IDs;
   connection_id must be an opaque local ID. Unknown provider fields belong in
   provider_json objects. The original canonical payload is stored immutably.
+
+X synchronization:
+  sync-x verifies the selected xurl account, then reads one official stream:
+  authored, mentions, likes, bookmarks, followers, or following. --budget is a
+  bounded request-cost allowance from 1 to 1000 units. Media policy none stores
+  no media rows; metadata stores references only, never binary media.
 EOF
 	return 0
 }
@@ -50,6 +60,14 @@ main() {
 	provision | import-archive | rebuild | coverage)
 		require_runtime || return 1
 		python3 "$PYTHON_HELPER" "$subcommand" "$@" || return 1
+		;;
+	sync-x)
+		require_runtime || return 1
+		if [[ ! -r "$X_HELPER" ]]; then
+			printf 'ERROR: X social adapter missing: %s\n' "$X_HELPER" >&2
+			return 1
+		fi
+		python3 "$X_HELPER" "$@" || return 1
 		;;
 	help | -h | --help)
 		usage
