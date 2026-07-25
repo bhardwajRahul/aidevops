@@ -1820,9 +1820,9 @@
       "pr": 16548
     },
     ".agents/scripts/approval-helper.sh": {
-      "at": "2026-07-18T15:40:41Z",
-      "hash": "c36a902d88c545eb9122f9baeb0d784225b9c81b",
-      "passes": 16,
+      "at": "2026-07-25T16:33:45Z",
+      "hash": "ce7af29b3bb5623138ef62c84bcc36c2a71f0bd6",
+      "passes": 17,
       "pr": 17454
     },
     ".agents/scripts/attribution-detection-helper.sh": {
@@ -7480,9 +7480,9 @@
       "pr": 16415
     },
     "TODO.md": {
-      "at": "2026-07-25T02:33:37Z",
-      "hash": "cad0ca7791166e56dc116048c658f978a63bacfd",
-      "passes": 202,
+      "at": "2026-07-25T16:34:50Z",
+      "hash": "e536bb4f066c978b82bbe65eea30a797ce55c08e",
+      "passes": 203,
       "pr": 15490
     },
     "aidevops.sh": {
@@ -7960,10 +7960,10 @@
       "passes": 1
     },
     ".agents/scripts/tests/test-full-loop-merge.sh": {
-      "hash": "b0d82bbb91cd4dd0fb6ffbda1bc2825c0ec94526",
-      "at": "2026-07-22T03:07:04Z",
+      "hash": "9a539a19553bcb2d20ec0a32d1223c81ffefd7a7",
+      "at": "2026-07-25T16:33:55Z",
       "pr": 25930,
-      "passes": 6
+      "passes": 7
     },
     ".agents/scripts/tests/test-gh-wrapper-rest-fallback.sh": {
       "hash": "386117d315c69e062d599a6a05e0155df6bab229",
