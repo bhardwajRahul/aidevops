@@ -10,6 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.182] - 2026-07-26
+
+### Changed
+
+- Maintenance: update simplification state registry
+- Maintenance: update simplification state registry
+- Maintenance: update simplification state registry
+- Maintenance: update simplification state registry
+- Maintenance: update simplification state registry
+- Refactor: isolate hook file inspection (#28651)
+- Documentation: refresh static star history
+- Maintenance: update simplification state registry
+
+### Fixed
+
+- bound issue-brief transport terms (#28678)
+- reconcile superseded CodeRabbit review blocks (#28680)
+- publish routines scaffold without canonical mutation (#28652)
+
 ## [3.32.181] - 2026-07-26
 
 ### Added
