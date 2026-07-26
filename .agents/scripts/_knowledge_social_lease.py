@@ -356,14 +356,14 @@ def update_run_receipt(
         raise SocialLeaseLostError("social run receipt is missing or stale")
 
 
-def fail_active_run(
+def finish_active_run(
     root: Path,
     lease: RunLease,
-    failure_class: str,
+    update: RunReceiptUpdate,
     *,
     now_epoch: int | None = None,
 ) -> None:
-    """Record a privacy-safe failure while the caller owns the lease."""
+    """Finish a run without binding or persisting unverified provider data."""
     database = connect(root)
     try:
         migrate(database)
@@ -371,9 +371,7 @@ def fail_active_run(
         update_run_receipt(
             database,
             lease,
-            RunReceiptUpdate(
-                "failed", failure_class=failure_class, terminal=True
-            ),
+            replace(update, terminal=True),
             now_epoch=now_epoch,
         )
         database.execute("COMMIT")
@@ -383,6 +381,22 @@ def fail_active_run(
         raise
     finally:
         database.close()
+
+
+def fail_active_run(
+    root: Path,
+    lease: RunLease,
+    failure_class: str,
+    *,
+    now_epoch: int | None = None,
+) -> None:
+    """Record a privacy-safe failure while the caller owns the lease."""
+    finish_active_run(
+        root,
+        lease,
+        RunReceiptUpdate("failed", failure_class=failure_class),
+        now_epoch=now_epoch,
+    )
 
 
 def release_run_lease(root: Path, lease: RunLease) -> bool:
