@@ -10,6 +10,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.181] - 2026-07-26
+
+### Added
+
+- add guarded X social adapter (#28603)
+- add authorized knowledge corpus catalog (#28591) (#28592)
+- prototype one-owner server-backed Desktop/TUI continuity (#28054)
+- add exact GitHub quota evidence (#28563)
+
+### Changed
+
+- Maintenance: update simplification state registry
+- Maintenance: reconcile t18177 task completion (#28638)
+- Maintenance: update simplification state registry
+- Maintenance: mark t18178 complete (pr:#28634 completed:2026-07-25) [skip ci]
+- Maintenance: sync ref:GH#28632 to TODO.md [skip ci]
+- Maintenance: update simplification state registry
+- Maintenance: update simplification state registry
+- Maintenance: sync ref:GH#28627 to TODO.md [skip ci]
+- Maintenance: update simplification state registry
+- Maintenance: update simplification state registry
+- Maintenance: update simplification state registry
+- Refactor: preserve context semantics across workload routing (#28593)
+- Maintenance: update simplification state registry
+- Documentation: enable social phase bootstrap (#28590)
+- Documentation: plan secure social knowledge corpora (#28588)
+- Maintenance: sync ref:GH#28587 to TODO.md [skip ci]
+- Maintenance: update simplification state registry
+- Documentation: clarify self-improvement auto-dispatch boundary (#28583)
+- Maintenance: sync ref:GH#28582 to TODO.md [skip ci]
+- Maintenance: mark t18173 complete (pr:#28581 completed:2026-07-24) [skip ci]
+- Maintenance: update simplification state registry
+- Maintenance: mark t18174 complete (pr:#28578 completed:2026-07-24) [skip ci]
+- Maintenance: update simplification state registry
+- Maintenance: sync ref:GH#28577 to TODO.md [skip ci]
+- Maintenance: sync ref:GH#28575 to TODO.md [skip ci]
+- Maintenance: update simplification state registry
+
+### Fixed
+
+- validate causal reports and preserve model attribution (#28648)
+- preserve untracked state during canonical updates (#28643)
+- prevent stale TODO mapping merges (#28641)
+- refresh merge scheduler in Pulse setup scope (#28637)
+- persist merge scheduler environment overrides (#28636)
+- avoid synthetic zero-frame quota attempts (#28631)
+- accept verified cross-repository blockers (#28626)
+- make interactive claims ownership-aware (#28623)
+- skip NMR guidance for locked issues (#28610)
+- make interactive issue takeover transactional (#28601)
+- validate runtime risk before remote mutation (#28595)
+- isolate forge projection checkout token (#28589)
+- validate commit-and-pr metadata before mutation (#28585)
+- exclude operational review comments from consolidation (#28581)
+- enforce review worker terminal-state contract (#28579)
+- preserve issue-sync shim PATH precedence (#28578)
+- harden PR title trust boundaries (#28573)
+- report project context scaffold failures (#28462)
+- harden review thread snapshot parsing (#28562)
+
 ## [3.32.180] - 2026-07-24
 
 ### Changed
