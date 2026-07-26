@@ -4721,3 +4721,5 @@ t019.3.4,Update AGENTS.md with Beads integration docs,,beads,1h,45m,2025-12-21T1
 - [ ] t18176 Plan secure personal and shared social knowledge corpora #enhancement #framework #knowledge #parent #security ref:GH#28587
 
 - [x] t18178 Unify review evidence and policy adapters #bug ref:GH#28632 pr:#28634 completed:2026-07-25
+
+- [ ] t18179 Repair triage ownership isolation and harden public issue review #bug #framework #pulse #security ref:GH#28705
