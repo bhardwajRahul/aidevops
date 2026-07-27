@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.184] - 2026-07-27
+
+### Changed
+
+- Documentation: remove deprecated osgrep guidance (#28708)
+- Maintenance: sync ref:GH#28705 to TODO.md [skip ci]
+- Maintenance: update simplification state registry
+
+### Fixed
+
+- fail closed on external issue trust gates (#28711)
+- migrate actions to Node 24 runtimes (#28693)
+- remove unused Reddit stream imports (#28688)
+
 ## [3.32.183] - 2026-07-26
 
 ### Changed
