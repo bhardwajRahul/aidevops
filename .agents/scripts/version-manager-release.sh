@@ -581,6 +581,7 @@ run_post_release_agent_sync() {
 		print_error "Post-release deployment gate cannot resolve the release checkout commit"
 		return 1
 	}
+	deploy_args+=(--expected-sha "$release_sha")
 
 	print_info "Running post-release aidevops agent sync..."
 	local sync_output=""
@@ -589,7 +590,7 @@ run_post_release_agent_sync() {
 		AIDEVOPS_DEPLOY_TARGET="$HOME/.aidevops/agents" \
 		bash "$deploy_script" "${deploy_args[@]}" 2>&1) || sync_exit=$?
 
-	if [[ "$sync_exit" -ne 0 ]]; then
+	if [[ "$sync_exit" -ne 0 && "$sync_exit" -ne 2 ]]; then
 		print_error "Post-release aidevops deployment or CLI convergence failed: $sync_output"
 		return 1
 	fi
@@ -602,7 +603,11 @@ run_post_release_agent_sync() {
 		return 1
 	fi
 
-	print_success "Post-release aidevops deployment and CLI convergence completed"
+	if [[ "$sync_exit" -eq 2 ]]; then
+		print_success "Post-release aidevops runtime was already converged to ${release_sha:0:12} (verified no-op)"
+	else
+		print_success "Post-release aidevops deployment and CLI convergence completed"
+	fi
 	return 0
 }
 
