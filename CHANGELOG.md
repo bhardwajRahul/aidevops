@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.186] - 2026-07-27
+
+### Changed
+
+- Maintenance: update simplification state registry
+- Maintenance: update simplification state registry
+
+### Fixed
+
+- reconcile verified NMR approval races (#28723)
+- recover authorized releases after intervening main commits (#28720)
+- tolerate delayed Pulse launchd starts (#28719)
+- route PR conversation locks through gh pr (#28718)
+- clean stale pulse benign-block ledgers (#28716)
+
 ## [3.32.185] - 2026-07-27
 
 ### Fixed
