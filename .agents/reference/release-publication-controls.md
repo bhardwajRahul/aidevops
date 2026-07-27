@@ -73,6 +73,11 @@ from terminal non-publishing sources may remain in the release tree without
 rewriting those receipts. PR #28729 reviews the remaining authorized source,
 PR #28701 at its exact merge SHA.
 
+Aggregation PR #28736 reviews authorized PR #28735 at
+`023ae92964f6add94517d99a4091e6b1a20c9445` through the same path because the
+deterministic t18179 completion commit advanced `main` before its security
+release was published.
+
 Manual arbitrary-version package publication is intentionally unsupported. A
 recovery operation must use an existing tag that passes the same verifier.
 
