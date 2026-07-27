@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.188] - 2026-07-27
+
+### Changed
+
+- Maintenance: mark t18179 complete (pr:#28735 completed:2026-07-27) [skip ci]
+
+### Fixed
+
+- harden sandboxed triage review isolation (#28735)
+
 ## [3.32.187] - 2026-07-27
 
 ### Added
