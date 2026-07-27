@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.185] - 2026-07-27
+
+### Fixed
+
+- preserve issue publication and normalize dispatch labels (#28715)
+- verify direct PR repair targets (#28714)
+- reconcile unscoped permission blockers (#28709)
+- enforce framework bug brief validation (#28712)
+
 ## [3.32.184] - 2026-07-27
 
 ### Changed
