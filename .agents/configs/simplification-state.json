@@ -6012,9 +6012,9 @@
       "pr": 13102
     },
     ".agents/tools/document/document-creation.md": {
-      "at": "2026-07-11T14:36:30Z",
-      "hash": "8bcd2777d53ca2ab6d2aa01ba9576845185a1135",
-      "passes": 3,
+      "at": "2026-07-27T05:29:53Z",
+      "hash": "8f9dbdde0692a8cf78725fb4630c41df84c99f88",
+      "passes": 4,
       "pr": 11592
     },
     ".agents/tools/document/document-extraction.md": {
@@ -6366,9 +6366,9 @@
       "pr": 11857
     },
     ".agents/tools/ocr/overview.md": {
-      "at": "2026-04-03T16:35:54Z",
-      "hash": "6dedb5ff5ef2e5d4288b956494a2bfc34b15b864",
-      "passes": 1,
+      "at": "2026-07-27T05:29:59Z",
+      "hash": "d17bd1d830a988498ba5a5e1cea2762312bd5982",
+      "passes": 2,
       "pr": 16637
     },
     ".agents/tools/ocr/paddleocr.md": {
