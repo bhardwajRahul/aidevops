@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.187] - 2026-07-27
+
+### Added
+
+- add forensic OCR repair for mirrored and rotated PDFs (#28730)
+
+### Changed
+
+- Maintenance: update simplification state registry
+- Documentation: record release controls activation (#28732)
+- Maintenance: update simplification state registry
+- Documentation: preserve reusable tooling capabilities (#28731)
+
 ## [3.32.186] - 2026-07-27
 
 ### Changed
