@@ -7199,9 +7199,9 @@
       "pr": 19047
     },
     ".agents/workflows/git-workflow.md": {
-      "at": "2026-07-18T16:12:37Z",
-      "hash": "23ad166301cf8a755b022801238ea96b243a0d64",
-      "passes": 17,
+      "at": "2026-07-28T22:19:14Z",
+      "hash": "015c85c9abea6f6e8ec59ae352020f95dca9759b",
+      "passes": 18,
       "pr": 12777
     },
     ".agents/workflows/init-routines.md": {
@@ -7486,15 +7486,15 @@
       "pr": 15490
     },
     "aidevops.sh": {
-      "at": "2026-07-28T20:12:53Z",
-      "hash": "a1de2ca9522aaab25e8ab07bfafbd7cb3f19c14c",
-      "passes": 307,
+      "at": "2026-07-28T22:19:17Z",
+      "hash": "3c9148abbe12c0b83d0cab4fb4dcaf06446f2df6",
+      "passes": 308,
       "pr": 19029
     },
     "setup.sh": {
-      "at": "2026-07-28T20:12:53Z",
-      "hash": "b754d8039bbfe0348f0af07b3d9ea60daaff5d94",
-      "passes": 306,
+      "at": "2026-07-28T22:19:17Z",
+      "hash": "bc5b55ec8da648b3126ec4f1cf514498ef690bed",
+      "passes": 307,
       "pr": 15470
     },
     "todo/tasks/GH#15363-brief.md": {
