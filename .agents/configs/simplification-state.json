@@ -2406,9 +2406,9 @@
       "pr": 18704
     },
     ".agents/scripts/pulse-dep-graph.sh": {
-      "at": "2026-07-26T17:35:29Z",
-      "hash": "c778f90c5e6a7a3857ae2bfc37ac0ca49aa32146",
-      "passes": 24,
+      "at": "2026-07-28T04:46:47Z",
+      "hash": "792713f74cdd32204577540cf33f9ff1f44e116f",
+      "passes": 25,
       "pr": 18796
     },
     ".agents/scripts/pulse-dispatch-core.sh": {
@@ -2424,9 +2424,9 @@
       "pr": 18799
     },
     ".agents/scripts/pulse-fast-fail.sh": {
-      "at": "2026-07-18T15:46:02Z",
-      "hash": "8c49bda766957ab6f2aa21a74b337d205e9b6a15",
-      "passes": 15,
+      "at": "2026-07-28T04:46:48Z",
+      "hash": "287e7348d4534d7ecae8653eedbc7f63a36e4eda",
+      "passes": 16,
       "pr": 18692
     },
     ".agents/scripts/pulse-instance-lock.sh": {
@@ -2436,9 +2436,9 @@
       "pr": 18691
     },
     ".agents/scripts/pulse-issue-reconcile.sh": {
-      "at": "2026-07-27T02:02:18Z",
-      "hash": "d8c1349b9d2994396b372e0e178436b1f8e79881",
-      "passes": 48,
+      "at": "2026-07-28T04:46:48Z",
+      "hash": "79a1ae340a50465e25f33a7c46433bb060ca876b",
+      "passes": 49,
       "pr": 18690
     },
     ".agents/scripts/pulse-merge.sh": {
@@ -2568,9 +2568,9 @@
       "pr": 17549
     },
     ".agents/scripts/tests/test-consolidation-dispatch.sh": {
-      "at": "2026-07-25T00:26:50Z",
-      "hash": "30d1b7558e90496d1435e78f43abfe5e55ca9a40",
-      "passes": 10,
+      "at": "2026-07-28T04:46:52Z",
+      "hash": "6005cc70b581ce129f4f6f2e2254f2f1f0cb3e0e",
+      "passes": 11,
       "pr": 18679
     },
     ".agents/scripts/tests/test-gh-signature-helper.sh": {
@@ -2615,9 +2615,9 @@
       "passes": 2
     },
     ".agents/scripts/worker-lifecycle-common.sh": {
-      "at": "2026-07-20T04:18:22Z",
-      "hash": "82fbdccd849afd428bb4a683356442b79ab6c9fa",
-      "passes": 26,
+      "at": "2026-07-28T04:46:55Z",
+      "hash": "fd74703b999e718d7b6485ce0ab06cb43b026e8b",
+      "passes": 27,
       "pr": 17353
     },
     ".agents/scripts/worker-watchdog.sh": {
@@ -7750,10 +7750,10 @@
       "passes": 8
     },
     ".agents/scripts/issue-sync-relationships.sh": {
-      "hash": "d7ab1c251392fe5807e8de1c8730e5d4ae17286d",
-      "at": "2026-07-26T19:49:26Z",
+      "hash": "4cfe0736400ef42c522e7a181c959bfb6c7d2f25",
+      "at": "2026-07-28T04:46:45Z",
       "pr": 20524,
-      "passes": 10
+      "passes": 11
     },
     ".agents/scripts/shared-gh-wrappers-rest-fallback.sh": {
       "hash": "9038c3e36cee82922604697698f0e6127523e1ed",
@@ -7960,16 +7960,16 @@
       "passes": 1
     },
     ".agents/scripts/tests/test-full-loop-merge.sh": {
-      "hash": "526dda13d184d9ff379e8dd5a5e9615608fd0791",
-      "at": "2026-07-28T01:01:34Z",
+      "hash": "6d9fdeda2b8e85c3dd5aee1b5c56eeb3a148e65a",
+      "at": "2026-07-28T04:46:52Z",
       "pr": 25930,
-      "passes": 10
+      "passes": 11
     },
     ".agents/scripts/tests/test-gh-wrapper-rest-fallback.sh": {
-      "hash": "252c99353010917804aa39104115a1b49e4fcf03",
-      "at": "2026-07-26T05:05:44Z",
+      "hash": "020454af44b9ad1c6d85b0be2dc0545261466460",
+      "at": "2026-07-28T04:46:53Z",
       "pr": 25929,
-      "passes": 7
+      "passes": 8
     },
     ".agents/scripts/tests/test-launchd-install-if-changed.sh": {
       "hash": "ac88f853d1ca8f2370f410e1b260704a2ecb2b7d",
@@ -8050,10 +8050,10 @@
       "passes": 3
     },
     ".agents/scripts/headless-runtime-worker.sh": {
-      "hash": "690523c59f28e73d2cc1222df4dd51ce68df77e1",
-      "at": "2026-07-27T18:37:22Z",
+      "hash": "62e190eb57043acffcd7834168ffb3b203a25e7f",
+      "at": "2026-07-28T04:46:44Z",
       "pr": 26521,
-      "passes": 18
+      "passes": 19
     },
     ".agents/scripts/install-hooks-helper.sh": {
       "hash": "0fa74195f7243ea22d952d156e4faccb1bbc2125",
@@ -8086,10 +8086,10 @@
       "passes": 9
     },
     ".agents/scripts/headless-runtime-failure.sh": {
-      "hash": "2210c69696de0e7ea61971d89cef04cecc36bbc6",
-      "at": "2026-07-27T02:02:04Z",
+      "hash": "6b3c3396b91e4c020b3aec1872a9534e45391339",
+      "at": "2026-07-28T04:46:44Z",
       "pr": 26623,
-      "passes": 11
+      "passes": 12
     },
     ".agents/scripts/gh-failure-miner-helper.sh": {
       "hash": "a4ed111ba2630eff5f153d2f353ea5e727dcf819",
