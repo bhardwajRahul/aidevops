@@ -1766,9 +1766,9 @@
       "pr": 15301
     },
     ".agents/reference/routines.md": {
-      "at": "2026-07-23T21:30:33Z",
-      "hash": "d107d719de99aceb3781af9583e4bf44d1cbfed9",
-      "passes": 5,
+      "at": "2026-07-28T19:05:42Z",
+      "hash": "31a19b5484f78dce04320b543280be34020cb220",
+      "passes": 6,
       "pr": 17783
     },
     ".agents/reference/secret-handling.md": {
@@ -7486,15 +7486,15 @@
       "pr": 15490
     },
     "aidevops.sh": {
-      "at": "2026-07-28T17:00:36Z",
-      "hash": "b9bedf061d23f9252096919585031a11e1ad1c65",
-      "passes": 305,
+      "at": "2026-07-28T19:06:46Z",
+      "hash": "31b135a106955fb50100a92d0c491918e602d5cf",
+      "passes": 306,
       "pr": 19029
     },
     "setup.sh": {
-      "at": "2026-07-28T17:00:36Z",
-      "hash": "d870404868f46f3ab11c3b73559286a8f91b750f",
-      "passes": 304,
+      "at": "2026-07-28T19:06:46Z",
+      "hash": "ccbea9a5560eff205323cd7f71364d224a6eb8f5",
+      "passes": 305,
       "pr": 15470
     },
     "todo/tasks/GH#15363-brief.md": {
@@ -7702,10 +7702,10 @@
       "passes": 19
     },
     ".agents/scripts/pulse-routines.sh": {
-      "hash": "e0a2ff8349081fa6a0a51764a9e888cb0402a0ef",
-      "at": "2026-07-23T23:46:07Z",
+      "hash": "3b5a402831f9fffdd7f18b358c2ab982218fc072",
+      "at": "2026-07-28T19:05:51Z",
       "pr": 20413,
-      "passes": 7
+      "passes": 8
     },
     ".agents/reference/parent-task-lifecycle.md": {
       "hash": "ff5714e088204a0ade863884d48ef8a19a2c012a",
