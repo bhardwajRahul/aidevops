@@ -10,6 +10,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.189] - 2026-07-28
+
+### Added
+
+- add Medium account archive ingestion (#28789)
+- add release-only upstream watch mode (#28773)
+- add bounded Meta account knowledge ingestion (#28765)
+- add guarded LinkedIn account snapshots (#28753)
+- add guarded X List collection (#28698)
+
+### Changed
+
+- Maintenance: update simplification state registry
+- Maintenance: update simplification state registry
+- Maintenance: mark t18181 complete (pr:#28773 completed:2026-07-28) [skip ci]
+- Maintenance: sync ref:GH#28771 to TODO.md [skip ci]
+- Maintenance: mark t18180 complete (pr:#28761 completed:2026-07-27) [skip ci]
+- Tests: cover malformed triage metadata dispatch (#28761)
+- Maintenance: update simplification state registry
+- Tests: execute publication destination guards (#28760)
+- Maintenance: update simplification state registry
+- Maintenance: sync ref:GH#28754 to TODO.md [skip ci]
+- Maintenance: update simplification state registry
+
+### Fixed
+
+- let non-WIP base drift reach normal rebase (#28776)
+- bridge checkout-free planning publication to merge gate (#28772)
+- pin OpenCode for headless workers (#28770)
+- validate explicit squash merge subjects
+- terminate MCP timeout process groups (#28767)
+- clean up synchronous systemd service cgroups (#28764)
+- make interactive start help terminal (#28749)
+- enforce exact post-merge deployment provenance (#28726)
+- avoid synthetic issue-sync refs (#28734)
+
 ## [3.32.188] - 2026-07-27
 
 ### Changed
