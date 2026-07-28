@@ -5001,9 +5001,9 @@
       "pr": 11338
     },
     ".agents/tools/context/model-routing.md": {
-      "at": "2026-07-18T16:11:02Z",
-      "hash": "9146b2f440de5da00c5a01837ec93e2788d83127",
-      "passes": 11,
+      "at": "2026-07-28T20:12:29Z",
+      "hash": "aa0b135e8dd03992492c978bb4d2329176672d67",
+      "passes": 12,
       "pr": 13255
     },
     ".agents/tools/context/openapi-search.md": {
@@ -7486,15 +7486,15 @@
       "pr": 15490
     },
     "aidevops.sh": {
-      "at": "2026-07-28T19:06:46Z",
-      "hash": "31b135a106955fb50100a92d0c491918e602d5cf",
-      "passes": 306,
+      "at": "2026-07-28T20:12:53Z",
+      "hash": "a1de2ca9522aaab25e8ab07bfafbd7cb3f19c14c",
+      "passes": 307,
       "pr": 19029
     },
     "setup.sh": {
-      "at": "2026-07-28T19:06:46Z",
-      "hash": "ccbea9a5560eff205323cd7f71364d224a6eb8f5",
-      "passes": 305,
+      "at": "2026-07-28T20:12:53Z",
+      "hash": "b754d8039bbfe0348f0af07b3d9ea60daaff5d94",
+      "passes": 306,
       "pr": 15470
     },
     "todo/tasks/GH#15363-brief.md": {
