@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.190] - 2026-07-28
+
+### Changed
+
+- Maintenance: update simplification state registry
+- Documentation: record safe Skool ingestion gap (#28802)
+
+### Fixed
+
+- bind dispatch precreation to finite owner
+- converge terminal release cleanup receipts (#28806)
+
 ## [3.32.189] - 2026-07-28
 
 ### Added
