@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.197] - 2026-07-30
+
+### Changed
+
+- Maintenance: update simplification state registry
+
+### Fixed
+
+- dispatch before label maintenance
+- preserve colon-qualified TODO labels (#28881)
+
 ## [3.32.196] - 2026-07-29
 
 ### Added
