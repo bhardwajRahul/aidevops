@@ -10,11 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.193] - 2026-07-29
+
+### Changed
+
+- Maintenance: aggregate authorized dispatch-fix release
+- Refactor: split headless runtime database lifecycle (#28842)
+- Maintenance: update simplification state registry
+- Documentation: prepare release notes for dispatch fixes
+- Maintenance: update simplification state registry
+
 ### Fixed
 
-- exclude Pulse stage subshells from runtime audit false positives (#28827)
-- bind terminal dispatch evidence to exact worker attempts (#28830)
-- share authoritative required-check configuration across full-loop and Pulse (#28831)
+- correlate terminal dispatch evidence
+- exclude pulse stage subshells from runtime audit (#28834)
 
 ## [3.32.192] - 2026-07-28
 
