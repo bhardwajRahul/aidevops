@@ -7486,15 +7486,15 @@
       "pr": 15490
     },
     "aidevops.sh": {
-      "at": "2026-07-29T05:39:30Z",
-      "hash": "40cf7c90651a71f8d3c41a6c10e237ad8a7aeac5",
-      "passes": 309,
+      "at": "2026-07-29T18:48:02Z",
+      "hash": "e3d929cb6b24d5fc3ac9aa1cbeb6d9b070c1612b",
+      "passes": 310,
       "pr": 19029
     },
     "setup.sh": {
-      "at": "2026-07-29T05:39:31Z",
-      "hash": "d5c99ee5e7386d293792f42adcb0809138c30cee",
-      "passes": 308,
+      "at": "2026-07-29T18:48:02Z",
+      "hash": "986a28754b92a8665c8ccca54c7b235b77be85e1",
+      "passes": 309,
       "pr": 15470
     },
     "todo/tasks/GH#15363-brief.md": {
@@ -7942,10 +7942,10 @@
       "passes": 2
     },
     ".agents/aidevops/knowledge-plane.md": {
-      "hash": "11b3cfa38ef305155117041182b0e6456b554de3",
-      "at": "2026-07-02T17:50:50Z",
+      "hash": "dd83a9ebe3aa6ba1f1895a3bc206f9223cba1799",
+      "at": "2026-07-29T18:45:27Z",
       "pr": 25993,
-      "passes": 2
+      "passes": 3
     },
     ".agents/scripts/task-complete-helper.sh": {
       "hash": "4e079911f6e44adf60b1496417c965b1eb71aaba",
