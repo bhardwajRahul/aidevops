@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.195] - 2026-07-29
+
+### Changed
+
+- Documentation: review Native SDK v0.6.2 (#28854)
+- Maintenance: update simplification state registry
+
 ## [3.32.194] - 2026-07-29
 
 ### Changed
