@@ -7301,9 +7301,9 @@
       "pr": 18319
     },
     ".agents/workflows/postflight.md": {
-      "at": "2026-07-27T18:38:20Z",
-      "hash": "2289a9fc6f6c8a7b6b6f65b07e00eb51acfc2e42",
-      "passes": 7,
+      "at": "2026-07-30T04:53:50Z",
+      "hash": "902fa9056b7acff10d1f736f622619b1d28a3b48",
+      "passes": 8,
       "pr": 11739
     },
     ".agents/workflows/pr-loop.md": {
@@ -7354,9 +7354,9 @@
       "pr": 12038
     },
     ".agents/workflows/release.md": {
-      "at": "2026-07-27T18:38:21Z",
-      "hash": "cbab797cbc3c3a05364cf87e65ae956fdc4fae3f",
-      "passes": 11,
+      "at": "2026-07-30T04:53:51Z",
+      "hash": "777dc6ea7a59bd13f8f9003acfd2dac7bd01375d",
+      "passes": 12,
       "pr": 13318
     },
     ".agents/workflows/remember.md": {
@@ -7486,15 +7486,15 @@
       "pr": 15490
     },
     "aidevops.sh": {
-      "at": "2026-07-30T00:24:34Z",
-      "hash": "0043fc7a710e1fed864485fd1c48ca8d287bedea",
-      "passes": 312,
+      "at": "2026-07-30T04:53:53Z",
+      "hash": "aad10357d483111ffeca0c458b5b736479ad9910",
+      "passes": 313,
       "pr": 19029
     },
     "setup.sh": {
-      "at": "2026-07-30T00:24:34Z",
-      "hash": "ac493378e1aa10217191764e10f536b2668141dc",
-      "passes": 311,
+      "at": "2026-07-30T04:53:53Z",
+      "hash": "3b3d31fad380907d283fa08a2515be24a4210883",
+      "passes": 312,
       "pr": 15470
     },
     "todo/tasks/GH#15363-brief.md": {
