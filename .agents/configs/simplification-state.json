@@ -288,9 +288,9 @@
       "pr": 11812
     },
     ".agents/commands/AGENTS.md": {
-      "at": "2026-07-27T04:20:13Z",
-      "hash": "78f6637338e44064dac4c398ad4254857ad0ecd8",
-      "passes": 106,
+      "at": "2026-07-30T03:43:44Z",
+      "hash": "da9633ae88109b1dd2bc80fff928e8a4b70bc812",
+      "passes": 107,
       "pr": 18117
     },
     ".agents/commands/aidevops-automate.md": {
@@ -1784,9 +1784,9 @@
       "pr": 15301
     },
     ".agents/reference/session.md": {
-      "at": "2026-07-18T15:39:54Z",
-      "hash": "18d26144385f535fc27104b936e2fc115815712f",
-      "passes": 7,
+      "at": "2026-07-30T03:44:11Z",
+      "hash": "33d21ee2ec4694bfa01e69f75beb9a2f1fff9eb8",
+      "passes": 8,
       "pr": 16417
     },
     ".agents/reference/settings.md": {
@@ -1952,9 +1952,9 @@
       "pr": 16797
     },
     ".agents/scripts/commands/full-loop.md": {
-      "at": "2026-07-27T18:37:17Z",
-      "hash": "4d54e6c316fb3003b5ba1ee3f5ec1a9fbc714522",
-      "passes": 42,
+      "at": "2026-07-30T03:44:14Z",
+      "hash": "01f207170ef0ed9abb0cf86df6250c7102416722",
+      "passes": 43,
       "pr": 14590
     },
     ".agents/scripts/commands/init-routines.md": {
@@ -2262,9 +2262,9 @@
       "pr": 12145
     },
     ".agents/scripts/full-loop-helper.sh": {
-      "at": "2026-07-25T03:38:14Z",
-      "hash": "e32d908c8b68f9425d1a18530cff9bcbdd43bc09",
-      "passes": 40,
+      "at": "2026-07-30T03:44:18Z",
+      "hash": "dc1de82d8e298f014b6c854dc0ac01e60c659627",
+      "passes": 41,
       "pr": 19046
     },
     ".agents/scripts/generate-claude-commands.sh": {
@@ -4793,9 +4793,9 @@
       "pr": 12957
     },
     ".agents/tools/build-mcp/aidevops-plugin.md": {
-      "at": "2026-05-01T21:37:57Z",
-      "hash": "57247a4c06097cff719cbacc37e3341469f0a3fa",
-      "passes": 4,
+      "at": "2026-07-30T03:45:16Z",
+      "hash": "3d62e4138afe943ef8c745e19ff66b7907445b81",
+      "passes": 5,
       "pr": 14775
     },
     ".agents/tools/build-mcp/api-wrapper.md": {
@@ -7193,9 +7193,9 @@
       "pr": 13065
     },
     ".agents/workflows/full-loop.md": {
-      "at": "2026-07-27T18:38:19Z",
-      "hash": "4d54e6c316fb3003b5ba1ee3f5ec1a9fbc714522",
-      "passes": 31,
+      "at": "2026-07-30T03:45:52Z",
+      "hash": "01f207170ef0ed9abb0cf86df6250c7102416722",
+      "passes": 32,
       "pr": 19047
     },
     ".agents/workflows/git-workflow.md": {
@@ -7480,9 +7480,9 @@
       "pr": 16415
     },
     "TODO.md": {
-      "at": "2026-07-30T02:32:13Z",
-      "hash": "b86f505d939aa891e1772d49d3bb789c226cd070",
-      "passes": 212,
+      "at": "2026-07-30T03:45:55Z",
+      "hash": "182489605eee504e404f73a96f626506b085861f",
+      "passes": 213,
       "pr": 15490
     },
     "aidevops.sh": {
