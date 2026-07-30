@@ -4736,3 +4736,5 @@ t019.3.4,Update AGENTS.md with Beads integration docs,,beads,1h,45m,2025-12-21T1
 - [x] t18183 Preserve framed GH attempts and REST rewrite failures #auto-dispatch #bug ref:GH#28907 pr:#28909 completed:2026-07-30
 
 - [x] t18186 Deprecate retired Gemini Code Assist review integration #bug ref:GH#28934 pr:#28936 completed:2026-07-30
+
+- [ ] t18187 Fix Pulse scheduler regression rejecting generated routines repositories #auto-dispatch #bug ref:GH#28957
