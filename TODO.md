@@ -1208,7 +1208,7 @@ t193,setup.sh fails in non-interactive supervisor deploy step,,bugfix|setup,1h,4
 
 - [x] t18182 fix(simplification-state): preserve a clean canonical checkout across refresh publication #bug #framework #pulse #reliability #interactive #auto-dispatch #priority:high ~4h tier:thinking ref:GH#28872 logged:2026-07-29 -> [todo/tasks/t18182-brief.md] pr:#28905 completed:2026-07-30
 
-- [ ] t18185 Strengthen OpenCode compaction continuation state #documentation #full-loop #no-auto-dispatch #opencode-plugin #testing #type:enhancement ref:GH#28913
+- [x] t18185 Strengthen OpenCode compaction continuation state #documentation #full-loop #no-auto-dispatch #opencode-plugin #testing #type:enhancement ref:GH#28913 pr:#28914 completed:2026-07-30
 
 ## In Progress
 
