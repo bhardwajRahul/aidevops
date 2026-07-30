@@ -1210,7 +1210,7 @@ t193,setup.sh fails in non-interactive supervisor deploy step,,bugfix|setup,1h,4
 
 - [x] t18185 Strengthen OpenCode compaction continuation state #documentation #full-loop #no-auto-dispatch #opencode-plugin #testing #type:enhancement ref:GH#28913 pr:#28914 completed:2026-07-30
 
-- [ ] t18184 Fix status-label reconciliation and REST issue edit array safety #bug #efficiency #framework #github-api #no-auto-dispatch ref:GH#28912
+- [x] t18184 Fix status-label reconciliation and REST issue edit array safety #bug #efficiency #framework #github-api #no-auto-dispatch ref:GH#28912 pr:#28933 completed:2026-07-30
 
 ## In Progress
 
