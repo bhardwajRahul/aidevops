@@ -10,6 +10,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.198] - 2026-07-30
+
+### Changed
+
+- Maintenance: aggregate authorized compaction-continuity release
+- Maintenance: update simplification state registry
+- Maintenance: mark t18185 complete (pr:#28914 completed:2026-07-30) [skip ci]
+- Maintenance: sync ref:GH#28912 to TODO.md [skip ci]
+- Maintenance: update simplification state registry
+- Maintenance: mark t18183 complete (pr:#28909 completed:2026-07-30) [skip ci]
+- Maintenance: sync ref:GH#28907 to TODO.md [skip ci]
+- Maintenance: mark t18182 complete (pr:#28905 completed:2026-07-30) [skip ci]
+- Maintenance: update simplification state registry
+
+### Fixed
+
+- dispatch exact-tag postflight (#28819)
+- adopt externally merged cleanup receipts (#28915)
+- isolate OpenCode setup fixture candidates (#28908)
+- isolate simplification state publication (#28905)
+- recover stale worker draft checkpoints (#28902)
+- allow read-only diff-tree queries (#28903)
+- isolate PR output from diagnostics (#28901)
+- accept explicit no-required-check evidence (#28900)
+
 ## [3.32.197] - 2026-07-30
 
 ### Changed
