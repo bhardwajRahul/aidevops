@@ -7354,9 +7354,9 @@
       "pr": 12038
     },
     ".agents/workflows/release.md": {
-      "at": "2026-07-30T04:53:51Z",
-      "hash": "777dc6ea7a59bd13f8f9003acfd2dac7bd01375d",
-      "passes": 12,
+      "at": "2026-07-30T06:00:15Z",
+      "hash": "c9ead2e7e28b57e83522c20b5e7481588ecaedab",
+      "passes": 13,
       "pr": 13318
     },
     ".agents/workflows/remember.md": {
