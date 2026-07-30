@@ -4728,3 +4728,5 @@ t019.3.4,Update AGENTS.md with Beads integration docs,,beads,1h,45m,2025-12-21T1
 - [x] t18180 Add malformed triage prompt metadata propagation regression coverage #test #framework #pulse #security #interactive #auto-dispatch ~1h tier:standard ref:GH#28754 logged:2026-07-27 -> [todo/tasks/t18180-brief.md] pr:#28761 completed:2026-07-27
 
 - [x] t18181 Add release-only upstream watch mode for Native SDK #enhancement #framework #monitoring ref:GH#28771 pr:#28773 completed:2026-07-28
+
+- [ ] t18183 Preserve framed GH attempts and REST rewrite failures #auto-dispatch #bug ref:GH#28907
