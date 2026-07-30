@@ -4729,4 +4729,4 @@ t019.3.4,Update AGENTS.md with Beads integration docs,,beads,1h,45m,2025-12-21T1
 
 - [x] t18181 Add release-only upstream watch mode for Native SDK #enhancement #framework #monitoring ref:GH#28771 pr:#28773 completed:2026-07-28
 
-- [ ] t18183 Preserve framed GH attempts and REST rewrite failures #auto-dispatch #bug ref:GH#28907
+- [x] t18183 Preserve framed GH attempts and REST rewrite failures #auto-dispatch #bug ref:GH#28907 pr:#28909 completed:2026-07-30
