@@ -193,3 +193,4 @@ and monotonically decreases".
 | 54 | ratchet-post-merge | auto-ratchet after cbf598e ("fix: stabilize Qlty cache-sensitive scans (#28268)"): count 52 + 2 buffer = 54 (previously 56, reduction 2) |
 | 53 | ratchet-post-merge | auto-ratchet after 5a015e7 ("GH#28297: refactor: simplify recovery payload validation (#28299)"): count 51 + 2 buffer = 53 (previously 54, reduction 1) |
 | 52 | ratchet-post-merge | auto-ratchet after 385ae34 ("refactor: simplify Tabby profile synchronization (#28986)"): count 50 + 2 buffer = 52 (previously 53, reduction 1) |
+| 51 | ratchet-post-merge | auto-ratchet after 0c68395 ("refactor: split OAuth callback server (#28989)"): count 49 + 2 buffer = 51 (previously 52, reduction 1) |
