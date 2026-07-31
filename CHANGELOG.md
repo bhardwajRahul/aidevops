@@ -10,6 +10,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.199] - 2026-07-31
+
+### Changed
+
+- Maintenance: aggregate authorized maintainer-gating release
+- Maintenance: update simplification state registry
+- Maintenance: ratchet QLTY_SMELL_THRESHOLD 53→52 (-1) [skip ci]
+- Refactor: simplify Tabby profile synchronization (#28986)
+- Refactor: split greeting responsibilities (#28985)
+- Maintenance: update simplification state registry
+- Maintenance: mark t18188 complete (pr:#28972 completed:2026-07-31) [skip ci]
+- Maintenance: update simplification state registry
+- Maintenance: sync ref:GH#28967 to TODO.md [skip ci]
+- Maintenance: update simplification state registry
+- Maintenance: mark t18187 complete (pr:#28961 completed:2026-07-31) [skip ci]
+- Maintenance: update simplification state registry
+- Maintenance: sync ref:GH#28957 to TODO.md [skip ci]
+- Maintenance: update simplification state registry
+- Maintenance: mark t18186 complete (pr:#28936 completed:2026-07-30) [skip ci]
+- Maintenance: sync ref:GH#28934 to TODO.md [skip ci]
+- Maintenance: update simplification state registry
+- Maintenance: mark t18184 complete (pr:#28933 completed:2026-07-30) [skip ci]
+- Maintenance: update simplification state registry
+- Maintenance: update simplification state registry
+
+### Fixed
+
+- resolve Reddit ingestion review findings (#28984)
+- reconcile concurrent status writers (#28982)
+- isolate routines publication from canonical guard (#28981)
+- resolve matching canonical recovery remotes (#28974)
+- preserve automatic dispatch continuation (#28977)
+- keep check-workflows help side-effect-free (#28973)
+- default solo-maintainer approvals to zero (#28972)
+- preserve task completion guard compatibility (#28969)
+- prevent stale pre-edit branch reuse (#28964)
+- guard quota capture cleanup under nounset (#28960)
+- scope pending permissions to worker sessions
+- abort merge pass when GitHub auth is unavailable
+
 ## [3.32.198] - 2026-07-30
 
 ### Changed
