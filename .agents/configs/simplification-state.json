@@ -408,9 +408,9 @@
       "pr": 18172
     },
     ".agents/configs/complexity-thresholds-history.md": {
-      "at": "2026-07-31T04:10:10Z",
-      "hash": "01c301072c900ef9e91b7d3da28d02ae4a491284",
-      "passes": 61,
+      "at": "2026-07-31T06:36:17Z",
+      "hash": "833eb0c7c49a0867c39e28bac58902a8904a484e",
+      "passes": 62,
       "pr": 17979
     },
     ".agents/content.md": {
@@ -7756,10 +7756,10 @@
       "passes": 13
     },
     ".agents/scripts/shared-gh-wrappers-rest-fallback.sh": {
-      "hash": "34519eac9dfbe30d736f4a514db8460e98b084f9",
-      "at": "2026-07-30T23:38:29Z",
+      "hash": "63430080492e48901feaac9fb09abe076fe6e3a8",
+      "at": "2026-07-31T06:36:41Z",
       "pr": 20552,
-      "passes": 32
+      "passes": 33
     },
     ".agents/scripts/pulse-dirty-pr-sweep.sh": {
       "hash": "96a786c79fef00879d9b57783fc53317b3a7c863",
@@ -7960,16 +7960,16 @@
       "passes": 1
     },
     ".agents/scripts/tests/test-full-loop-merge.sh": {
-      "hash": "6d9fdeda2b8e85c3dd5aee1b5c56eeb3a148e65a",
-      "at": "2026-07-28T04:46:52Z",
+      "hash": "c83a20682d9e434cc71fab4287cfdd71ea1005f0",
+      "at": "2026-07-31T06:36:42Z",
       "pr": 25930,
-      "passes": 11
+      "passes": 12
     },
     ".agents/scripts/tests/test-gh-wrapper-rest-fallback.sh": {
-      "hash": "57892a6b2220fe8428534429685c62dbadbb0dd3",
-      "at": "2026-07-30T19:19:05Z",
+      "hash": "76a98ccd56b92c87e9f41004514b8c25f5f071f8",
+      "at": "2026-07-31T06:36:42Z",
       "pr": 25929,
-      "passes": 9
+      "passes": 10
     },
     ".agents/scripts/tests/test-launchd-install-if-changed.sh": {
       "hash": "ac88f853d1ca8f2370f410e1b260704a2ecb2b7d",
