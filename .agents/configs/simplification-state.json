@@ -1952,9 +1952,9 @@
       "pr": 16797
     },
     ".agents/scripts/commands/full-loop.md": {
-      "at": "2026-07-30T03:44:14Z",
-      "hash": "01f207170ef0ed9abb0cf86df6250c7102416722",
-      "passes": 43,
+      "at": "2026-07-31T00:44:18Z",
+      "hash": "442dc7786da1493f994713fc405bdd6f8d4953d8",
+      "passes": 44,
       "pr": 14590
     },
     ".agents/scripts/commands/init-routines.md": {
@@ -2298,9 +2298,9 @@
       "pr": 13021
     },
     ".agents/scripts/headless-runtime-helper.sh": {
-      "at": "2026-07-29T05:38:35Z",
-      "hash": "8dd58906746b5e7f2871bcbb17e3c08008216d8c",
-      "passes": 78,
+      "at": "2026-07-31T00:44:22Z",
+      "hash": "50598049a5de56626c353487906c8b92ad93d86e",
+      "passes": 79,
       "pr": 15086
     },
     ".agents/scripts/headless-runtime-lib.sh": {
@@ -2316,9 +2316,9 @@
       "pr": 18843
     },
     ".agents/scripts/issue-sync-helper.sh": {
-      "at": "2026-07-24T19:19:48Z",
-      "hash": "f81772b99b65e8a8d39a3fce634e1074c7fb743d",
-      "passes": 32,
+      "at": "2026-07-31T00:44:23Z",
+      "hash": "2e0a7aafea8098230606caf3047451759d6fe4c2",
+      "passes": 33,
       "pr": 18706
     },
     ".agents/scripts/issue-sync-lib.sh": {
@@ -7193,9 +7193,9 @@
       "pr": 13065
     },
     ".agents/workflows/full-loop.md": {
-      "at": "2026-07-30T03:45:52Z",
-      "hash": "01f207170ef0ed9abb0cf86df6250c7102416722",
-      "passes": 32,
+      "at": "2026-07-31T00:46:04Z",
+      "hash": "442dc7786da1493f994713fc405bdd6f8d4953d8",
+      "passes": 33,
       "pr": 19047
     },
     ".agents/workflows/git-workflow.md": {
@@ -7480,9 +7480,9 @@
       "pr": 16415
     },
     "TODO.md": {
-      "at": "2026-07-30T23:39:18Z",
-      "hash": "4020911bf0d629866b9e10686552a9b0a624dd41",
-      "passes": 216,
+      "at": "2026-07-31T00:46:11Z",
+      "hash": "22209312903c87477b86eaf445fddf5a12378004",
+      "passes": 217,
       "pr": 15490
     },
     "aidevops.sh": {
@@ -7702,10 +7702,10 @@
       "passes": 20
     },
     ".agents/scripts/pulse-routines.sh": {
-      "hash": "5f9c1536a4fb08e47ae4a643dd9d3592826b0e69",
-      "at": "2026-07-29T22:17:52Z",
+      "hash": "e0e9d5eb260b425c7bf30cc006cbdb8cfb9196a3",
+      "at": "2026-07-31T00:44:26Z",
       "pr": 20413,
-      "passes": 9
+      "passes": 10
     },
     ".agents/reference/parent-task-lifecycle.md": {
       "hash": "ff5714e088204a0ade863884d48ef8a19a2c012a",
@@ -8050,10 +8050,10 @@
       "passes": 3
     },
     ".agents/scripts/headless-runtime-worker.sh": {
-      "hash": "62e190eb57043acffcd7834168ffb3b203a25e7f",
-      "at": "2026-07-28T04:46:44Z",
+      "hash": "aec0380827bfd949eaa3848521f6b7d592fd12ce",
+      "at": "2026-07-31T00:44:22Z",
       "pr": 26521,
-      "passes": 19
+      "passes": 20
     },
     ".agents/scripts/install-hooks-helper.sh": {
       "hash": "0fa74195f7243ea22d952d156e4faccb1bbc2125",
