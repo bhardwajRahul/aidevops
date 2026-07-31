@@ -408,9 +408,9 @@
       "pr": 18172
     },
     ".agents/configs/complexity-thresholds-history.md": {
-      "at": "2026-07-20T04:17:58Z",
-      "hash": "f53466788109d2ad9adc5e562411ca4d94b1c02f",
-      "passes": 60,
+      "at": "2026-07-31T04:10:10Z",
+      "hash": "01c301072c900ef9e91b7d3da28d02ae4a491284",
+      "passes": 61,
       "pr": 17979
     },
     ".agents/content.md": {
@@ -6126,9 +6126,9 @@
       "pr": 11909
     },
     ".agents/tools/git/git-security.md": {
-      "at": "2026-07-31T03:02:26Z",
-      "hash": "19012cd2f6db93117e7df4ace72b611c49767806",
-      "passes": 2,
+      "at": "2026-07-31T04:11:08Z",
+      "hash": "d770b8f0d1ff5dca35c4dc1a098a0be21b1119b0",
+      "passes": 3,
       "pr": 16442
     },
     ".agents/tools/git/gitea-cli.md": {
@@ -7828,10 +7828,10 @@
       "passes": 6
     },
     ".agents/scripts/commands/setup-git.md": {
-      "hash": "04cbde49442d249959e097ca0640ffeb00b44685",
-      "at": "2026-07-31T03:01:20Z",
+      "hash": "073dc40d80d034ff4550f848fb94f3c0435f34f7",
+      "at": "2026-07-31T04:10:26Z",
       "pr": 20994,
-      "passes": 5
+      "passes": 6
     },
     ".agents/reference/sync-pat-platforms.md": {
       "hash": "f1fe0560d21ec9b63f89394ad5bf67f771a74fdf",
