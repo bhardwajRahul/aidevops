@@ -4739,3 +4739,5 @@ t019.3.4,Update AGENTS.md with Beads integration docs,,beads,1h,45m,2025-12-21T1
 - [x] t18186 Deprecate retired Gemini Code Assist review integration #bug ref:GH#28934 pr:#28936 completed:2026-07-30
 
 - [x] t18188 Default PR approval count to zero for solo-maintainer repos #enhancement ref:GH#28967 pr:#28972 completed:2026-07-31
+
+- [ ] t18189 Route standard workload tier through OpenAI Luna max reasoning #bug #type:enhancement ref:GH#29070
