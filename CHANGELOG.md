@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.202] - 2026-07-31
+
+### Changed
+
+- Documentation: disposition Binance Square knowledge ingestion (#29067)
+- Maintenance: sync ref:GH#29070 to TODO.md [skip ci]
+- Maintenance: update simplification state registry
+
+### Fixed
+
+- restore review thread mutations (#29059)
+- restore Medium credential imports (#29056)
+- filter addressed CodeRabbit feedback (#29055)
+
 ## [3.32.201] - 2026-07-31
 
 ### Added
