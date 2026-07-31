@@ -70,6 +70,7 @@ readonly SEVERITY_PASS="pass"
 readonly CAT_WORKFLOWS="workflows"
 readonly CAT_BRANCH_PROTECTION="branch_protection"
 readonly CAT_REVIEW_BOT_GATE="review_bot_gate"
+readonly CAT_MAINTAINER_GATE="maintainer_gate"
 readonly CAT_LINKED_ISSUE_GATE="linked_issue_gate"
 readonly CAT_DEPENDENCIES="dependencies"
 readonly CAT_COLLABORATORS="collaborators"
@@ -89,7 +90,11 @@ FINDINGS_JSON="[]"
 # UTILITY FUNCTIONS (shared across sub-libraries)
 # ============================================================
 
-print_info() { local msg="$1"; echo -e "${BLUE}[INFO]${NC} $msg"; return 0; }
+print_info() {
+	local msg="$1"
+	echo -e "${BLUE}[INFO]${NC} $msg"
+	return 0
+}
 print_pass() {
 	local msg="$1"
 	echo -e "${GREEN}[PASS]${NC} $msg"
@@ -114,7 +119,11 @@ print_skip() {
 	((++FINDINGS_INFO))
 	return 0
 }
-print_header() { local msg="$1"; echo -e "\n${BOLD}${CYAN}$msg${NC}"; return 0; }
+print_header() {
+	local msg="$1"
+	echo -e "\n${BOLD}${CYAN}$msg${NC}"
+	return 0
+}
 
 # Add a finding to the JSON array
 # Usage: add_finding <severity> <category> <message>
@@ -182,12 +191,15 @@ User-level commands:
 
 Per-repo checks (check/audit/store):
   1. GitHub Actions workflows for unsafe AI patterns
-  2. Branch protection (PR reviews required)
+  2. Branch protection (pull requests and required status checks)
   3. Review-bot-gate as required status check
-  4. Dependency vulnerabilities (npm/pip/cargo audit)
-  5. Collaborator access levels (per-repo, never cached)
-  6. Repository security basics (SECURITY.md, .gitignore, secrets)
-  7. SYNC_PAT detection for repos using issue-sync.yml (t2374)
+  4. Maintainer-gate as required NMR authority check
+  5. Linked-issue-check as required status check
+  6. Dependency vulnerabilities (npm/pip/cargo audit)
+  7. Collaborator access levels (per-repo, never cached)
+  8. Repository security basics (SECURITY.md, .gitignore, secrets)
+  9. SYNC_PAT detection for repos using issue-sync.yml (t2374)
+  10. Cross-account secrets:inherit detection
 
 User-level checks (startup-check/setup/status):
   1. Prompt injection patterns (YAML file present and <30d old)
