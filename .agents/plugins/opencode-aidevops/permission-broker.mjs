@@ -3,9 +3,10 @@
 
 import { createHash } from "crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "fs";
-import { dirname } from "path";
+import { dirname, join } from "path";
 import { homedir } from "os";
 import { appendWorkerBlockerEvent } from "../../scripts/worker-blocker-log.mjs";
+import { isManagedToolOutputRead } from "./permission-broker-tool-output.mjs";
 
 const REQUEST_SCHEMA = "aidevops-permission-capture/v1";
 const MAX_PATTERN_LENGTH = 500;
@@ -200,38 +201,60 @@ function capturePermissionRequest(toolCalls, loggedEvents, home, blockerLogPath,
   return request;
 }
 
-async function rejectPermissionRequest(client, request) {
-  if (!request?.id || !request?.sessionID) return;
+async function replyPermissionRequest(client, request, response) {
+  if (!request?.id || !request?.sessionID || !client?.postSessionIdPermissionsPermissionId) return false;
   try {
-    await client.postSessionIdPermissionsPermissionId({
+    const result = await client.postSessionIdPermissionsPermissionId({
       path: { id: request.sessionID, permissionID: request.id },
-      body: { response: "reject" },
+      body: { response },
+      throwOnError: true,
     });
+    return !result?.error && (!result?.response || result.response.ok !== false);
   } catch {
-    // `opencode run` may have already rejected the same request.
+    return false;
   }
 }
 
 async function handlePermissionEvent(context, input) {
-  const { client, isHeadless, toolCalls, loggedEvents, home, blockerLogPath } = context;
+  const { client, isHeadless, toolCalls, loggedEvents, home, dataHome, blockerLogPath } = context;
   const event = input?.event;
   if (!isHeadless() || event?.type !== "permission.asked") return;
   const request = event.properties || {};
+  if (isManagedToolOutputRead(toolCalls, request, dataHome)
+    && await replyPermissionRequest(client, request, "once")) return;
   capturePermissionRequest(toolCalls, loggedEvents, home, blockerLogPath, request);
-  await rejectPermissionRequest(client, request);
+  await replyPermissionRequest(client, request, "reject");
 }
 
 function handlePermissionAsk(context, input, output) {
-  const { isHeadless, toolCalls, loggedEvents, home, blockerLogPath } = context;
+  const { isHeadless, toolCalls, loggedEvents, home, dataHome, blockerLogPath } = context;
   if (!isHeadless()) return;
+  if (isManagedToolOutputRead(toolCalls, input, dataHome)) {
+    output.status = "allow";
+    return;
+  }
   capturePermissionRequest(toolCalls, loggedEvents, home, blockerLogPath, input || {});
   output.status = "deny";
 }
 
-export function createPermissionBroker({ client, isHeadless, home = homedir(), blockerLogPath = undefined }) {
+export function createPermissionBroker({
+  client,
+  isHeadless,
+  home = homedir(),
+  dataHome = process.env.XDG_DATA_HOME || "",
+  blockerLogPath = undefined,
+}) {
   const toolCalls = new Map();
   const loggedEvents = new Set();
-  const context = { client, isHeadless, toolCalls, loggedEvents, home, blockerLogPath };
+  const context = {
+    client,
+    isHeadless,
+    toolCalls,
+    loggedEvents,
+    home,
+    dataHome: dataHome || join(home, ".local", "share"),
+    blockerLogPath,
+  };
   return {
     recordToolCall: (input, output) => recordPermissionToolCall(toolCalls, isHeadless, home, input, output),
     handleEvent: (input) => handlePermissionEvent(context, input),
