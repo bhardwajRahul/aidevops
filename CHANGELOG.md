@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.201] - 2026-07-31
+
+### Added
+
+- add bounded Pulse queue observability (#29032)
+
+### Changed
+
+- Maintenance: update simplification state registry
+- Tests: align install-hooks managed Git fixture
+- Maintenance: update simplification state registry
+- Documentation: record post-deployment Pulse latency evidence (#29017)
+
 ## [3.32.200] - 2026-07-31
 
 ### Changed
