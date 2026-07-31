@@ -7684,10 +7684,10 @@
       "passes": 2
     },
     ".agents/reference/gh-audit-log.md": {
-      "hash": "592e4e8e1f7789286955fb2a98137940903ff8e5",
-      "at": "2026-07-31T10:32:59Z",
+      "hash": "669ffc2b570dc3d3166ebd212f6abb63f9836a3d",
+      "at": "2026-07-31T13:52:54Z",
       "pr": 20206,
-      "passes": 2
+      "passes": 3
     },
     ".agents/scripts/install-pre-push-guards.sh": {
       "hash": "5a4b48306cc6fb4a1ac9bc76bdeb7851c2b6078a",
