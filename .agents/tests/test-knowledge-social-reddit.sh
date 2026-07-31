@@ -190,7 +190,6 @@ expected_listing_routes = {
     "downvoted": "selected.downvoted",
     "hidden": "selected.hidden",
     "subscribed_subreddits": "client.user.subreddits",
-    "moderated_subreddits": "client.user.moderator_subreddits",
     "contributor_subreddits": "client.user.contributor_subreddits",
 }
 expected_snapshot_routes = {
@@ -213,6 +212,25 @@ for stream, expected_route in expected_snapshot_routes.items():
     client = RecordingNode("client", route_calls)
     assert _snapshot_values(client, stream) == []
     assert route_calls == [(expected_route, {})]
+
+
+class ModeratedIdentity:
+    def moderated(self):
+        return []
+
+
+class ModeratedUser:
+    def me(self):
+        return ModeratedIdentity()
+
+
+class ModeratedClient:
+    user = ModeratedUser()
+
+
+assert _snapshot_values(ModeratedClient(), "moderated_subreddits") == []
+assert STREAMS["moderated_subreddits"].pagination == "snapshot"
+assert STREAMS["moderated_subreddits"].retention_limit is None
 
 missing = "PRAW is unavailable; install it outside the agent session"
 assert str(_provider_failure(f"ERROR: {missing}")) == missing
@@ -288,6 +306,8 @@ assert_eq "backfill exhaustion preserves the first page watermark" \
 	"done:t3_new:1"
 assert_eq "both immutable backfill pages remain durable" \
 	"$(sql_value "SELECT count(*) FROM fetch_batches WHERE connection_id='conn_authored' AND stream='authored_submissions' AND terminal_status='success'")" 2
+assert_eq "fetch batches store response-body hashes rather than envelope IDs" \
+	"$(sql_value "SELECT count(*) FROM fetch_batches WHERE connection_id='conn_authored' AND response_hash != batch_id")" 2
 
 cat >"$TMP_DIR/incremental.json" <<'JSON'
 {
@@ -349,6 +369,8 @@ JSON
 	--connection-id conn_authored --account-id reddit42 \
 	--stream authored_comments --profile fixture --budget 1 \
 	--fixture "$TMP_DIR/comments-partial.json" >/dev/null
+assert_eq "partial incremental pages preserve completed backfill state" \
+	"$(sql_value "SELECT backfill_complete FROM sync_cursors WHERE connection_id='conn_authored' AND stream='authored_comments'")" 1
 
 cat >"$TMP_DIR/comments-resume.json" <<'JSON'
 {
@@ -524,6 +546,7 @@ python3 - "$ROOT" "$SCRIPT_DIR/../scripts" <<'PY'
 import os
 import sqlite3
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, sys.argv[2])
@@ -534,6 +557,7 @@ from _knowledge_social_collect import (
     PageCheckpoint,
     SuccessfulPage,
 )
+import _knowledge_social_collect_persist as persist_module
 from _knowledge_social_collect_persist import persist_page
 from _knowledge_social_lease import (
     RunLeaseRequest,
@@ -587,6 +611,31 @@ page = SuccessfulPage(
     True,
     1,
 )
+expiring = acquire_run_lease(
+    root,
+    RunLeaseRequest("conn_reddit_expiry", "friends", "same_runner", "sync", 1),
+    now_epoch=9000,
+)
+expiry_archive = dict(archive, connection_id="conn_reddit_expiry")
+expiry_context = replace(context, connection_id="conn_reddit_expiry", lease=expiring)
+expiry_page = replace(page, archive=expiry_archive)
+clock = iter((9000, 9001))
+original_social_now = persist_module.social_now
+persist_module.social_now = lambda: next(clock)
+try:
+    persist_page(expiry_context, expiry_page)
+except SocialLeaseLostError:
+    pass
+else:
+    raise SystemExit("Reddit collector committed after its lease expired")
+finally:
+    persist_module.social_now = original_social_now
+with sqlite3.connect(root / "index" / "social.db") as database:
+    expiry_cursor = database.execute(
+        "SELECT count(*) FROM sync_cursors WHERE connection_id='conn_reddit_expiry'"
+    ).fetchone()[0]
+assert expiry_cursor == 0
+release_run_lease(root, expiring)
 os.environ["AIDEVOPS_SOCIAL_NOW_EPOCH"] = "9001"
 try:
     persist_page(context, page)
