@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.209] - 2026-08-01
+
+### Changed
+
+- Documentation: normalize changelog release spacing
+
 ## [3.32.208] - 2026-08-01
 
 ### Changed
