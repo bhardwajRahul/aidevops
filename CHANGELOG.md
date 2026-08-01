@@ -10,6 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.210] - 2026-08-01
+
+### Added
+
+- add safe WhatsApp knowledge ingestion (#29135)
+- add safe local Signal knowledge ingestion (#29134)
+
+### Changed
+
+- Refactor: decompose headless runtime orchestration (#29137)
+- Refactor: split headless runtime complexity (#29133)
+
+### Fixed
+
+- detect standalone signature markers (#29144)
+- retry interactive maintainer gate statuses (#29143)
+
 ## [3.32.209] - 2026-08-01
 
 ### Changed
