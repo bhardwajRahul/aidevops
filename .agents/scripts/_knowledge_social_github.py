@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import base64
 from dataclasses import dataclass
 from typing import Any
 
@@ -18,7 +17,7 @@ from _knowledge_social_github_identity import (
     provider_account_id,
 )
 from _knowledge_social_oauth_request import OAuthPageRequest, OAuthRequestCodec
-from knowledge_social_import import canonical_json, reject_credentials
+from knowledge_social_import import reject_credentials
 
 PROVIDER = "github"
 CURSOR_PREFIX = "github-page-v1:"
@@ -78,23 +77,7 @@ REQUEST_CODEC = OAuthRequestCodec(
     handle_validator=login,
     instance_validator=instance_id,
 )
-PAGE_REQUEST_KEYS = set(REQUEST_CODEC.request_keys)
-
-
-def _text(value: Any, field: str, *, optional: bool = False) -> str | None:
-    if value is None and optional:
-        return None
-    if not isinstance(value, str) or not value or "\x00" in value:
-        raise GitHubAdapterError(f"GitHub {field} is invalid")
-    if len(value.encode()) > 16 * 1024:
-        raise GitHubAdapterError(f"GitHub {field} is invalid")
-    return value
-
-
-def _encode_cursor(position: int, cursor: str) -> str:
-    payload = canonical_json({"cursor": cursor, "position": position}).encode()
-    encoded = base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
-    return f"{CURSOR_PREFIX}{encoded}"
+PAGE_REQUEST_KEYS = REQUEST_CODEC.request_keys
 
 
 def page_request(stream: str, account: dict[str, Any], state: CursorState, limit: int) -> PageRequest:
@@ -138,9 +121,15 @@ def page_checkpoint(
         raise GitHubAdapterError("GitHub page pagination metadata is invalid")
     if len(page_data(payload)) > MAX_PAGE_ITEMS:
         raise GitHubAdapterError("GitHub page exceeds the item safety limit")
-    next_cursor = _text(meta.get("next_cursor"), "next cursor", optional=True)
+    next_cursor = REQUEST_CODEC.text(
+        meta.get("next_cursor"), "next cursor", optional=True
+    )
     complete = meta.get("complete")
     if not isinstance(complete, bool) or complete == (next_cursor is not None):
         raise GitHubAdapterError("GitHub page completion cursor is invalid")
-    cursor = _encode_cursor(request.position + 1, next_cursor) if next_cursor else None
+    cursor = (
+        REQUEST_CODEC.encode_cursor(request.position + 1, next_cursor)
+        if next_cursor
+        else None
+    )
     return PageCheckpoint(cursor, state.watermark), complete
