@@ -38,6 +38,7 @@ _WT_CLEAN_DEFERRED_OWNER_PID=""
 _WT_CLEAN_REASON_OWNED_SKIP="owned-skip"
 _WT_CLEAN_REMOVAL_LEASE_SESSION="cleanup:$$"
 _WT_CLEAN_REMOVAL_LEASE_TASK="worktree-removal"
+_WT_CLEAN_MARKER_CLOCK_SKEW_SECONDS=2
 
 # SCRIPT_DIR fallback — covers sourcing from test harnesses or direct invocation
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
@@ -55,6 +56,71 @@ fi
 
 # --- Functions ---
 
+_clean_process_age_seconds() {
+	local owner_pid="$1"
+	local elapsed=""
+	local days=0
+	local hours=0
+	local minutes=0
+	local seconds=0
+	local colons_only=""
+	local colon_count=0
+
+	[[ "$owner_pid" =~ ^[0-9]+$ ]] || return 1
+	elapsed=$(ps -p "$owner_pid" -o etime= 2>/dev/null | tr -d ' ') || return 1
+	[[ -n "$elapsed" ]] || return 1
+	if [[ "$elapsed" == *-* ]]; then
+		days="${elapsed%%-*}"
+		elapsed="${elapsed#*-}"
+	fi
+	colons_only="${elapsed//[!:]/}"
+	colon_count="${#colons_only}"
+	if [[ "$colon_count" -eq 2 ]]; then
+		IFS=':' read -r hours minutes seconds <<<"$elapsed"
+	elif [[ "$colon_count" -eq 1 ]]; then
+		IFS=':' read -r minutes seconds <<<"$elapsed"
+	else
+		seconds="$elapsed"
+	fi
+	[[ "$days" =~ ^[0-9]+$ ]] || return 1
+	[[ "$hours" =~ ^[0-9]+$ ]] || return 1
+	[[ "$minutes" =~ ^[0-9]+$ ]] || return 1
+	[[ "$seconds" =~ ^[0-9]+$ ]] || return 1
+	days=$((10#${days}))
+	hours=$((10#${hours}))
+	minutes=$((10#${minutes}))
+	seconds=$((10#${seconds}))
+	printf '%s\n' "$((days * 86400 + hours * 3600 + minutes * 60 + seconds))"
+	return 0
+}
+
+_clean_legacy_marker_matches_process_generation() {
+	local marker_path="$1"
+	local owner_pid="$2"
+	local marker_mtime=0
+	local now_epoch=0
+	local marker_age=0
+	local process_age=0
+
+	[[ -f "$marker_path" && "$owner_pid" =~ ^[0-9]+$ ]] || return 1
+	kill -0 "$owner_pid" 2>/dev/null || return 1
+	# Legacy markers contain only a PID. Compare ages so a process that started
+	# after the marker cannot inherit cleanup ownership through PID reuse.
+	# Missing timing evidence fails closed and preserves the worktree.
+	declare -F _file_mtime_epoch >/dev/null 2>&1 || return 0
+	marker_mtime=$(_file_mtime_epoch "$marker_path" 2>/dev/null) || return 0
+	process_age=$(_clean_process_age_seconds "$owner_pid" 2>/dev/null) || return 0
+	now_epoch=$(date +%s 2>/dev/null) || return 0
+	[[ "$marker_mtime" =~ ^[0-9]+$ && "$marker_mtime" -gt 0 ]] || return 0
+	[[ "$process_age" =~ ^[0-9]+$ ]] || return 0
+	[[ "$now_epoch" =~ ^[0-9]+$ && "$now_epoch" -ge "$marker_mtime" ]] || return 0
+	marker_age=$((now_epoch - marker_mtime))
+	if [[ $((process_age + _WT_CLEAN_MARKER_CLOCK_SKEW_SECONDS)) -ge "$marker_age" ]]; then
+		return 0
+	fi
+	return 1
+}
+
 _clean_deferred_parent_alive() {
 	local wt_path="$1"
 	local marker_path="${wt_path}/${_WT_CLEAN_DEFERRED_MARKER}"
@@ -66,10 +132,11 @@ _clean_deferred_parent_alive() {
 	fi
 	if [[ -n "$receipt_path" && -f "$receipt_path" ]]; then
 		_WT_CLEAN_DEFERRED_RECEIPT="$receipt_path"
-		_WT_CLEAN_DEFERRED_OWNER_PID=$(jq -r '.owner.pid // empty' "$receipt_path" 2>/dev/null || true)
 		if full_loop_cleanup_owner_alive "$receipt_path"; then
+			_WT_CLEAN_DEFERRED_OWNER_PID="${_FULL_LOOP_CLEANUP_OWNER_PID:-}"
 			return 0
 		fi
+		_WT_CLEAN_DEFERRED_OWNER_PID="${_FULL_LOOP_CLEANUP_OWNER_PID:-}"
 		rm -f "$marker_path" 2>/dev/null || true
 		return 2
 	fi
@@ -78,7 +145,7 @@ _clean_deferred_parent_alive() {
 	local owner_pid=""
 	IFS= read -r owner_pid <"$marker_path" || true
 	_WT_CLEAN_DEFERRED_OWNER_PID="$owner_pid"
-	if [[ "$owner_pid" =~ ^[0-9]+$ ]] && kill -0 "$owner_pid" 2>/dev/null; then
+	if _clean_legacy_marker_matches_process_generation "$marker_path" "$owner_pid"; then
 		return 0
 	fi
 	rm -f "$marker_path" 2>/dev/null || true
@@ -501,6 +568,162 @@ _clean_repo_slug() {
 	return 0
 }
 
+_clean_gh_graphql() {
+	command -v gh >/dev/null 2>&1 || return 1
+	gh api graphql "$@"
+	return $?
+}
+
+_clean_list_worktree_branches() {
+	local default_br="$1"
+	local porcelain=""
+	local line=""
+	local branch=""
+
+	porcelain=$(git worktree list --porcelain 2>/dev/null) || return 1
+	while IFS= read -r line; do
+		if [[ "$line" =~ ^branch\ refs/heads/(.+)$ ]]; then
+			branch="${BASH_REMATCH[1]}"
+			[[ "$branch" == "$default_br" ]] || printf '%s\n' "$branch"
+		fi
+	done <<<"$porcelain"
+	return 0
+}
+
+_clean_query_exact_merged_pr_batch() {
+	local owner="$1"
+	local repo_name="$2"
+	shift 2
+	[[ $# -gt 0 ]] || return 0
+
+	local query_vars="\$owner:String!,\$name:String!"
+	local query_fields=""
+	local query=""
+	local branch=""
+	local index=0
+	local -a graphql_args=(-f "owner=$owner" -f "name=$repo_name")
+
+	for branch in "$@"; do
+		query_vars="${query_vars},\$h${index}:String!"
+		query_fields="${query_fields} q${index}:pullRequests(first:1,states:MERGED,headRefName:\$h${index}){nodes{headRefName}}"
+		graphql_args+=(-f "h${index}=$branch")
+		index=$((index + 1))
+	done
+	query="query(${query_vars}){repository(owner:\$owner,name:\$name){${query_fields}}}"
+
+	_clean_gh_graphql -f "query=$query" "${graphql_args[@]}" \
+		--jq '(.data.repository // {}) | .[] | .nodes[]? | .headRefName'
+	return $?
+}
+
+# Prefetch exact merged-PR proof for every registered worktree branch. A single
+# GraphQL request can resolve many branch heads, avoiding one network round-trip
+# per worktree when the repository has more merged PRs than the summary list.
+_clean_build_exact_merged_pr_branches() {
+	local default_br="$1"
+	local repo_slug=""
+	local owner=""
+	local repo_name=""
+	local branches=""
+	local branch=""
+	local batch_size="${AIDEVOPS_WORKTREE_PR_BATCH_SIZE:-100}"
+	local -a batch=()
+
+	[[ "$batch_size" =~ ^[0-9]+$ ]] && [[ "$batch_size" -ge 1 ]] && [[ "$batch_size" -le 100 ]] || batch_size=100
+	repo_slug=$(_clean_repo_slug 2>/dev/null || true)
+	[[ "$repo_slug" == */* ]] || return 1
+	owner="${repo_slug%%/*}"
+	repo_name="${repo_slug#*/}"
+	branches=$(_clean_list_worktree_branches "$default_br") || return 1
+	[[ -n "$branches" ]] || return 0
+
+	while IFS= read -r branch; do
+		[[ -n "$branch" ]] || continue
+		batch+=("$branch")
+		if [[ "${#batch[@]}" -ge "$batch_size" ]]; then
+			_clean_query_exact_merged_pr_batch "$owner" "$repo_name" "${batch[@]}" || return 1
+			batch=()
+		fi
+	done <<<"$branches"
+	if [[ "${#batch[@]}" -gt 0 ]]; then
+		_clean_query_exact_merged_pr_batch "$owner" "$repo_name" "${batch[@]}" || return 1
+	fi
+	return 0
+}
+
+_clean_prepare_git_branch_caches() {
+	local default_br="$1"
+	local merged_branches=""
+	local upstream_lines=""
+	local remote_branches=""
+	local branch=""
+	local remote_name=""
+	local pushed_branches=""
+	local upstream_status=0
+	local remote_status=0
+
+	_WT_CLEAN_LOCAL_MERGED_BRANCHES=""
+	_WT_CLEAN_LOCAL_MERGED_CACHE_READY=false
+	_WT_CLEAN_PUSHED_BRANCHES=""
+	_WT_CLEAN_REMOTE_BRANCHES=""
+	_WT_CLEAN_REMOTE_BRANCH_CACHE_READY=false
+
+	if merged_branches=$(git branch --format='%(refname:short)' --merged "$default_br" 2>/dev/null); then
+		_WT_CLEAN_LOCAL_MERGED_BRANCHES="$merged_branches"
+		_WT_CLEAN_LOCAL_MERGED_CACHE_READY=true
+	fi
+
+	upstream_lines=$(git for-each-ref --format='%(refname:short)%09%(upstream:remotename)' refs/heads/ 2>/dev/null) || upstream_status=$?
+	remote_branches=$(git for-each-ref --format='%(refname:lstrip=3)' refs/remotes/ 2>/dev/null) || remote_status=$?
+	if [[ "$upstream_status" -eq 0 && "$remote_status" -eq 0 ]]; then
+		while IFS=$'\t' read -r branch remote_name; do
+			[[ -n "$branch" && -n "$remote_name" ]] || continue
+			pushed_branches="${pushed_branches}${pushed_branches:+$'\n'}${branch}"
+		done <<<"$upstream_lines"
+		if [[ -n "$remote_branches" ]]; then
+			pushed_branches="${pushed_branches}${pushed_branches:+$'\n'}${remote_branches}"
+		fi
+		_WT_CLEAN_PUSHED_BRANCHES="$pushed_branches"
+		_WT_CLEAN_REMOTE_BRANCHES="$remote_branches"
+		_WT_CLEAN_REMOTE_BRANCH_CACHE_READY=true
+	fi
+	return 0
+}
+
+_clean_branch_is_locally_merged() {
+	local wt_branch="$1"
+	local default_br="$2"
+	local merged_branches=""
+
+	if [[ "$_WT_CLEAN_LOCAL_MERGED_CACHE_READY" == "true" ]]; then
+		_clean_branch_list_contains_exact "$wt_branch" "$_WT_CLEAN_LOCAL_MERGED_BRANCHES"
+		return $?
+	fi
+	merged_branches=$(git branch --format='%(refname:short)' --merged "$default_br" 2>/dev/null) || return 1
+	_clean_branch_list_contains_exact "$wt_branch" "$merged_branches"
+	return $?
+}
+
+_clean_branch_was_pushed_cached() {
+	local wt_branch="$1"
+	if [[ "$_WT_CLEAN_REMOTE_BRANCH_CACHE_READY" == "true" ]]; then
+		_clean_branch_list_contains_exact "$wt_branch" "$_WT_CLEAN_PUSHED_BRANCHES"
+		return $?
+	fi
+	branch_was_pushed "$wt_branch"
+	return $?
+}
+
+_clean_branch_exists_on_remote_cached() {
+	local wt_branch="$1"
+	if [[ "$_WT_CLEAN_REMOTE_BRANCH_CACHE_READY" == "true" ]]; then
+		_clean_branch_list_contains_exact "$wt_branch" "$_WT_CLEAN_REMOTE_BRANCHES"
+		return $?
+	fi
+	_branch_exists_on_any_remote "$wt_branch"
+	return $?
+}
+
 _WT_CLEAN_PR_PROOF_UNKNOWN_REASONS=${_WT_CLEAN_PR_PROOF_UNKNOWN_REASONS:-}
 
 _clean_pr_proof_unknown_add() {
@@ -595,6 +818,9 @@ _clean_branch_has_exact_merged_pr() {
 	if _clean_branch_list_contains_exact "$wt_branch" "$merged_prs"; then
 		return 0
 	fi
+	if [[ "$_WT_CLEAN_EXACT_PR_PREFETCH_COMPLETE" == "true" ]]; then
+		return 1
+	fi
 	if ! command -v gh_pr_list &>/dev/null; then
 		return 1
 	fi
@@ -649,6 +875,12 @@ _clean_merge_type_has_terminal_pr_proof() {
 _WT_CLEAN_PROTECTED_PATHS="${_WT_CLEAN_PROTECTED_PATHS:-}"
 _WT_CLEAN_LAST_MERGE_TYPE="${_WT_CLEAN_LAST_MERGE_TYPE:-}"
 _WT_CLEAN_LAST_AUDIT_CONTEXT="${_WT_CLEAN_LAST_AUDIT_CONTEXT:-}"
+_WT_CLEAN_LOCAL_MERGED_BRANCHES="${_WT_CLEAN_LOCAL_MERGED_BRANCHES:-}"
+_WT_CLEAN_LOCAL_MERGED_CACHE_READY="${_WT_CLEAN_LOCAL_MERGED_CACHE_READY:-false}"
+_WT_CLEAN_PUSHED_BRANCHES="${_WT_CLEAN_PUSHED_BRANCHES:-}"
+_WT_CLEAN_REMOTE_BRANCHES="${_WT_CLEAN_REMOTE_BRANCHES:-}"
+_WT_CLEAN_REMOTE_BRANCH_CACHE_READY="${_WT_CLEAN_REMOTE_BRANCH_CACHE_READY:-false}"
+_WT_CLEAN_EXACT_PR_PREFETCH_COMPLETE="${_WT_CLEAN_EXACT_PR_PREFETCH_COMPLETE:-false}"
 _WT_CLEAN_TYPE_SQUASH_MERGED_PR="squash-merged PR"
 _WT_CLEAN_TYPE_CLOSED_PR="closed PR"
 _WT_CLEAN_PROOF_GH_MERGED_PR="github-merged-pr"
@@ -875,7 +1107,7 @@ _clean_select_merge_type() {
 	local merged_prs="$4"
 	local closed_prs="$5"
 
-	if git branch --merged "$default_br" 2>/dev/null | grep -q "^\s*$wt_branch$" &&
+	if _clean_branch_is_locally_merged "$wt_branch" "$default_br" &&
 		! branch_has_zero_commits_ahead "$wt_branch" "$default_br"; then
 		printf '%s\n' "merged"
 		return 0
@@ -888,7 +1120,7 @@ _clean_select_merge_type() {
 		printf '%s\n' "$_WT_CLEAN_TYPE_CLOSED_PR"
 		return 0
 	fi
-	if [[ "$remote_unknown" == "false" ]] && branch_was_pushed "$wt_branch" && ! _branch_exists_on_any_remote "$wt_branch"; then
+	if [[ "$remote_unknown" == "false" ]] && _clean_branch_was_pushed_cached "$wt_branch" && ! _clean_branch_exists_on_remote_cached "$wt_branch"; then
 		printf '%s\n' "remote deleted"
 		return 0
 	fi
@@ -1445,6 +1677,7 @@ cmd_clean() {
 
 	local default_branch
 	default_branch=$(get_default_branch)
+	_clean_prepare_git_branch_caches "$default_branch"
 
 	# Fetch to get current remote branch state (detects deleted branches)
 	# Prune all remotes, not just origin (GH#3797)
@@ -1457,6 +1690,16 @@ cmd_clean() {
 	local merged_pr_branches
 	if ! merged_pr_branches=$(_clean_build_merged_pr_branches); then
 		_clean_pr_proof_unknown_add "unknown:merged-pr-list-unavailable"
+	fi
+	_WT_CLEAN_EXACT_PR_PREFETCH_COMPLETE=false
+	local exact_merged_pr_branches=""
+	local exact_prefetch_status=0
+	exact_merged_pr_branches=$(_clean_build_exact_merged_pr_branches "$default_branch") || exact_prefetch_status=$?
+	if [[ -n "$exact_merged_pr_branches" ]]; then
+		merged_pr_branches="${merged_pr_branches}${merged_pr_branches:+$'\n'}${exact_merged_pr_branches}"
+	fi
+	if [[ "$exact_prefetch_status" -eq 0 ]]; then
+		_WT_CLEAN_EXACT_PR_PREFETCH_COMPLETE=true
 	fi
 
 	local open_pr_branches
@@ -1471,16 +1714,17 @@ cmd_clean() {
 		_clean_pr_proof_unknown_add "unknown:closed-pr-list-unavailable"
 	fi
 
-	# First pass: scan and display merged worktrees
-	if ! _clean_scan_merged "$default_branch" "$main_worktree_path" "$remote_state_unknown" "$merged_pr_branches" "$open_pr_branches" "$force_merged" "$closed_pr_branches"; then
-		echo -e "${GREEN}No merged worktrees to clean up${NC}" >&2
-		return 0
-	fi
-
 	local response="n"
 	if [[ "$auto_mode" == "true" ]]; then
+		# The removal pass performs the complete classification and every mutable
+		# safety check. Avoid a redundant preview pass when no user confirmation
+		# is possible; interactive cleanup retains the candidate preview.
 		response="y"
 	else
+		if ! _clean_scan_merged "$default_branch" "$main_worktree_path" "$remote_state_unknown" "$merged_pr_branches" "$open_pr_branches" "$force_merged" "$closed_pr_branches"; then
+			echo -e "${GREEN}No merged worktrees to clean up${NC}" >&2
+			return 0
+		fi
 		echo "" >&2
 		echo -e "${YELLOW}Remove these worktrees? [y/N]${NC}" >&2
 		read -r response

@@ -26,6 +26,7 @@ _FULL_LOOP_RECEIPT_TIMESTAMP_REGEX='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2
 _FULL_LOOP_RECEIPT_VERSION_TAG_REGEX='^v[0-9]+\.[0-9]+\.[0-9]+$'
 _FULL_LOOP_RECREATED_RECEIPT_TRANSACTION_SCHEMA="aidevops.full-loop.recreated-receipts.transaction/v1"
 _FULL_LOOP_RECEIPT_LOCK=""
+_FULL_LOOP_CLEANUP_OWNER_PID=""
 
 _full_loop_validate_superseded_evidence() {
 	local evidence_path="$1"
@@ -544,7 +545,7 @@ full_loop_write_cleanup_deferred() {
 	return 0
 }
 
-_full_loop_cleanup_receipt_for_worktree_unlocked() {
+_full_loop_cleanup_receipt_for_worktree_unlocked_fallback() {
 	local worktree="$1"
 	local receipt_dir=""
 	local receipt_path=""
@@ -576,6 +577,56 @@ _full_loop_cleanup_receipt_for_worktree_unlocked() {
 			fi
 		fi
 	done
+	[[ -n "$selected_path" ]] || return 1
+	printf '%s\n' "$selected_path"
+	return 0
+}
+
+_full_loop_cleanup_receipt_for_worktree_unlocked() {
+	local worktree="$1"
+	local receipt_dir=""
+	local selected_path=""
+	local lookup_status=0
+
+	[[ -n "$worktree" ]] || return 1
+	receipt_dir=$(_full_loop_cleanup_receipt_dir) || return 1
+	[[ -d "$receipt_dir" ]] || return 1
+	# A cleanup pass can perform this lookup hundreds of times. Process every
+	# receipt in one jq invocation instead of launching jq once to three times
+	# per file. Malformed JSON falls back to the conservative per-file scan,
+	# which preserves the previous skip-invalid-file behaviour.
+	selected_path=$(jq -nr \
+		--arg worktree "$worktree" \
+		--arg superseded "$_FULL_LOOP_RECEIPT_PATH_RECREATED" \
+		--arg string_type "$_FULL_LOOP_RECEIPT_JSON_STRING_TYPE" '
+		reduce (
+			inputs
+			| select(type == "object")
+			| select(.worktree == $worktree)
+			| select((.receipt_disposition.state // "") != $superseded)
+			| {
+				path: input_filename,
+				created_at: (.created_at // ""),
+				is_migrated: (
+					if (((.migration.from_repository? // null) | type) == $string_type
+						and ((.migration.from_repository? // "") | length) > 0)
+					then 1 else 0 end
+				)
+			}
+		) as $candidate (
+			null;
+			if . == null
+				or $candidate.created_at > .created_at
+				or ($candidate.created_at == .created_at
+					and $candidate.is_migrated == 1 and .is_migrated != 1)
+			then $candidate else . end
+		)
+		| .path // empty
+	' "$receipt_dir"/*.json 2>/dev/null) || lookup_status=$?
+	if [[ "$lookup_status" -ne 0 ]]; then
+		_full_loop_cleanup_receipt_for_worktree_unlocked_fallback "$worktree"
+		return $?
+	fi
 	[[ -n "$selected_path" ]] || return 1
 	printf '%s\n' "$selected_path"
 	return 0
@@ -902,10 +953,13 @@ full_loop_cleanup_owner_alive() {
 	local owner_pid=""
 	local expected_identity=""
 	local observed_identity=""
+	local owner_record=""
+	_FULL_LOOP_CLEANUP_OWNER_PID=""
 
 	[[ -f "$receipt_path" ]] || return 1
-	owner_pid=$(jq -r '.owner.pid // empty' "$receipt_path" 2>/dev/null || true)
-	expected_identity=$(jq -r '.owner.process_identity // empty' "$receipt_path" 2>/dev/null || true)
+	owner_record=$(jq -r '[.owner.pid // "", .owner.process_identity // ""] | @tsv' "$receipt_path" 2>/dev/null || true)
+	IFS=$'\t' read -r owner_pid expected_identity <<<"$owner_record"
+	_FULL_LOOP_CLEANUP_OWNER_PID="$owner_pid"
 	[[ "$owner_pid" =~ ^[0-9]+$ && -n "$expected_identity" ]] || return 1
 	kill -0 "$owner_pid" 2>/dev/null || return 1
 	observed_identity=$(_full_loop_process_identity "$owner_pid") || return 1

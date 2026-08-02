@@ -184,6 +184,10 @@ test_terminal_pr_cleanup_waits_for_deferred_parent_exit() {
 	(
 		cd "$repo_path" || exit 1
 		source_clean_lib_with_stubs || exit 1
+		_file_mtime_epoch() {
+			date +%s
+			return 0
+		}
 		_clean_remove_merged "main" "$repo_path" "false" "$branch" "" "true" "" >/dev/null
 	) || rc=1
 	[[ -d "$wt_path" ]] || rc=1
@@ -210,6 +214,33 @@ test_terminal_pr_cleanup_waits_for_deferred_parent_exit() {
 	[[ -f "$registry_release_marker" ]] || rc=1
 	print_result "terminal PR cleanup waits for deferred parent exit" "$rc" \
 		"Expected first pulse to defer and second pulse after owner exit to remove worktree"
+	return 0
+}
+
+test_reused_legacy_marker_pid_expires() {
+	local wt_path="${TEST_ROOT}/wt-reused-legacy-pid"
+	local marker_path="${wt_path}/.agents/.full-loop-cleanup-deferred"
+	local rc=0
+	mkdir -p "${wt_path}/.agents" || rc=1
+	printf '%s\n' "$$" >"$marker_path" || rc=1
+
+	(
+		source_clean_lib_with_stubs || exit 1
+		_file_mtime_epoch() {
+			printf '%s\n' "1"
+			return 0
+		}
+		_clean_process_age_seconds() {
+			printf '%s\n' "1"
+			return 0
+		}
+		local deferred_state=0
+		_clean_deferred_parent_alive "$wt_path" || deferred_state=$?
+		[[ "$deferred_state" -eq 2 && ! -f "$marker_path" ]]
+	) || rc=1
+
+	print_result "legacy marker rejects a process generation newer than the marker" "$rc" \
+		"Expected a live recycled PID to expire instead of extending cleanup ownership"
 	return 0
 }
 
@@ -433,6 +464,120 @@ test_merged_pr_list_passes_explicit_repo_slug() {
 	grep -q -- '--repo testowner/testrepo' "$args_file" 2>/dev/null || rc=1
 	print_result "merged PR list passes explicit repo slug" "$rc" \
 		"Expected --repo testowner/testrepo in gh_pr_list args"
+	return 0
+}
+
+test_exact_merged_pr_batch_prefetch_covers_worktree_heads() {
+	local repo_path="${TEST_ROOT}/repo-batch-prefetch"
+	local wt_a="${TEST_ROOT}/wt-batch-prefetch-a"
+	local wt_b="${TEST_ROOT}/wt-batch-prefetch-b"
+	local branch_a="feature/gh-99040-batch-a"
+	local branch_b="feature/gh-99040-batch-b"
+	local args_file="${TEST_ROOT}/batch-prefetch-args"
+	local output=""
+	local rc=0
+	setup_repo "$repo_path" || rc=1
+	git -C "$repo_path" branch "$branch_a" || rc=1
+	git -C "$repo_path" branch "$branch_b" || rc=1
+	git -C "$repo_path" worktree add -q "$wt_a" "$branch_a" || rc=1
+	git -C "$repo_path" worktree add -q "$wt_b" "$branch_b" || rc=1
+
+	output=$(
+		cd "$repo_path" || exit 1
+		source_clean_lib_with_stubs || exit 1
+		_clean_query_exact_merged_pr_batch() {
+			printf '%s\n' "$*" >"$args_file"
+			printf '%s\n' "$branch_a"
+			return 0
+		}
+		_clean_build_exact_merged_pr_branches "main"
+	) || rc=1
+
+	[[ "$output" == "$branch_a" ]] || rc=1
+	grep -Fq -- "$branch_a" "$args_file" 2>/dev/null || rc=1
+	grep -Fq -- "$branch_b" "$args_file" 2>/dev/null || rc=1
+	print_result "exact merged PR batch prefetch covers registered worktree heads" "$rc" \
+		"Expected one batch to contain both worktree branch heads"
+	return 0
+}
+
+test_complete_exact_prefetch_skips_per_head_lookup() {
+	local repo_path="${TEST_ROOT}/repo-complete-prefetch"
+	local marker="${TEST_ROOT}/complete-prefetch-gh-called"
+	local rc=0
+	setup_repo "$repo_path" || rc=1
+
+	(
+		cd "$repo_path" || exit 1
+		source_clean_lib_with_stubs || exit 1
+		_WT_CLEAN_EXACT_PR_PREFETCH_COMPLETE=true
+		gh_pr_list() {
+			printf 'called\n' >"$marker"
+			printf '1\n'
+			return 0
+		}
+		if _clean_branch_has_exact_merged_pr "feature/gh-99041-not-merged" ""; then
+			exit 1
+		fi
+	) || rc=1
+
+	[[ ! -e "$marker" ]] || rc=1
+	print_result "complete exact merged PR prefetch skips per-head lookup" "$rc" \
+		"Expected a complete negative batch result to suppress redundant gh_pr_list calls"
+	return 0
+}
+
+test_prepared_git_branch_cache_avoids_per_branch_query() {
+	local repo_path="${TEST_ROOT}/repo-merged-cache"
+	local branch="feature/gh-99042-merged-cache"
+	local marker="${TEST_ROOT}/merged-cache-git-called"
+	local rc=0
+	setup_repo "$repo_path" || rc=1
+	git -C "$repo_path" branch "$branch" || rc=1
+
+	(
+		cd "$repo_path" || exit 1
+		source_clean_lib_with_stubs || exit 1
+		_clean_prepare_git_branch_caches "main"
+		git() {
+			printf 'called\n' >"$marker"
+			return 1
+		}
+		_clean_branch_is_locally_merged "$branch" "main"
+	) || rc=1
+
+	[[ ! -e "$marker" ]] || rc=1
+	print_result "prepared Git branch cache avoids per-branch query" "$rc" \
+		"Expected local merged classification to use the scan-level cache"
+	return 0
+}
+
+test_auto_clean_skips_redundant_preview_scan() {
+	local repo_path="${TEST_ROOT}/repo-auto-single-pass"
+	local scan_marker="${TEST_ROOT}/auto-single-pass-scan"
+	local remove_marker="${TEST_ROOT}/auto-single-pass-remove"
+	local rc=0
+	setup_repo "$repo_path" || rc=1
+
+	(
+		cd "$repo_path" || exit 1
+		source_clean_lib_with_stubs || exit 1
+		_clean_preflight_main_worktree() { printf '%s\n' "$repo_path"; return 0; }
+		_clean_prepare_git_branch_caches() { return 0; }
+		_clean_fetch_remotes() { printf 'false\n'; return 0; }
+		_clean_build_merged_pr_branches() { return 0; }
+		_clean_build_exact_merged_pr_branches() { return 0; }
+		_clean_build_open_pr_branches() { return 0; }
+		_clean_build_closed_pr_branches() { return 0; }
+		_clean_scan_merged() { printf 'called\n' >"$scan_marker"; return 0; }
+		_clean_remove_merged() { printf 'called\n' >"$remove_marker"; return 0; }
+		cmd_clean --auto --force-merged >/dev/null 2>&1
+	) || rc=1
+
+	[[ ! -e "$scan_marker" ]] || rc=1
+	[[ -e "$remove_marker" ]] || rc=1
+	print_result "automatic cleanup skips redundant preview scan" "$rc" \
+		"Expected --auto to classify only in the removal pass"
 	return 0
 }
 
@@ -842,6 +987,7 @@ echo "=== test-worktree-cleanup-branch-merged-owned-skip.sh ==="
 test_protected_pass_set_blocks_branch_merged_removal
 test_terminal_pr_proof_bypasses_protected_pass_skip
 test_terminal_pr_cleanup_waits_for_deferred_parent_exit
+test_reused_legacy_marker_pid_expires
 test_dead_marker_preserves_replacement_owner
 test_terminal_cleanup_requires_removal_lease
 test_cleanup_lease_released_when_removal_guard_blocks
@@ -849,6 +995,10 @@ test_remove_merged_reports_metadata_verification_failure
 test_squash_merged_pr_without_ancestor_proof_classifies
 test_prefetched_merged_pr_metadata_skips_exact_head_lookup
 test_merged_pr_list_passes_explicit_repo_slug
+test_exact_merged_pr_batch_prefetch_covers_worktree_heads
+test_complete_exact_prefetch_skips_per_head_lookup
+test_prepared_git_branch_cache_avoids_per_branch_query
+test_auto_clean_skips_redundant_preview_scan
 test_deleted_squash_merged_pr_metadata_wins_over_remote_deleted
 test_exact_head_merged_pr_proof_wins_when_global_list_misses
 test_exact_merged_pr_proof_recovers_unproven_traditional_merge
