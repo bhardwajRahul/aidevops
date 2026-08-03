@@ -10,9 +10,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.217] - 2026-08-03
+
+### Added
+
+- add bounded Hashnode account collection (#29343)
+
+### Changed
+
+- Tests: isolate merge-stuck audit fixtures (#29380)
+- Refactor: isolate hook status tool (#29370)
+- Refactor: split OAuth pool account actions (#29367)
+- Refactor: split OAuth auth hooks by provider (#29366)
+- Refactor: share forum provider runtime (#29355)
+- Refactor: reuse OAuth codec for GitHub page requests (#29348)
+- Refactor: reuse shared Forem fixture reader (#29349)
+- Refactor: deduplicate Mastodon page requests (#29351)
+- Refactor: isolate pre-edit tool implementation (#29352)
+- Documentation: record bounded Substack knowledge no-route (#29329)
+- Refactor: reduce provider auth request complexity (#29306)
+- Refactor: deduplicate Forem identity validation (#29295)
+- Refactor: split OAuth pool health checks (#29293)
+- Refactor: deduplicate Forem HTTP transport (#29290)
+- Tests: expose profile README helper failures (#29277)
+- Documentation: normalize changelog release spacing
+
 ### Fixed
 
-- Preserve complete, bounded review feedback across paginated review and comment results (#29392)
+- flag dual feedback stalls (#29369)
+- prevent premature parent closure recommendations (#29344)
+- discard failed GitHub identity output (#29316)
+- preserve no-jq audit test shadow path (#29314)
+- meter Pulse residual reads exactly (#29304)
+- keep stall reviews out of complexity metrics (#29299)
+- pass exact release tag during cleanup verification (#29281)
+- suppress TODO deletion diagnostics (#29279)
+- add portable live worker count (#29278)
+- make Codacy chunked help set-u safe (#29275)
+- preserve quota reclaim guard ownership (#29274)
+- preserve releases through protected-main PRs (#29267)
+- make dirty cleanup transactional (#29269)
+- fail closed on mixed GH_DEBUG output (#29261)
 
 ## [3.32.216] - 2026-08-02
 
