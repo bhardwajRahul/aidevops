@@ -10,6 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.219] - 2026-08-03
+
+### Added
+
+- require platform fix regression evidence (#29421)
+
+### Changed
+
+- CI: gate Linux systemd regressions (#29420)
+- Documentation: refine Cloudron packaging assessment guidance (#29409)
+
+### Fixed
+
+- separate task ID hook and transport timeouts (#29422)
+- bootstrap linked worktree JavaScript dependencies (#29419)
+- compare broad ratchets with merge base (#29407)
+- diagnose headless prelaunch failures (#29391)
+- retry zero-session review workers (#29390)
+
 ## [3.32.218] - 2026-08-03
 
 ### Changed
