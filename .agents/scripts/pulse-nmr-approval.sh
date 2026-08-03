@@ -70,12 +70,23 @@ NMR_CLASS_GENUINE_AUTHORITY="genuine-authority"
 NMR_CLASS_TEMPORARY="temporary"
 NMR_SOURCE_DEFAULT="default"
 NMR_STATUS_HUMAN_AUTHORITY="human-authority-required"
+NMR_REASON_ACTION_CONTINUE="continue"
+NMR_REASON_ACTION_AUTO="auto"
+NMR_REASON_ACTION_DEFER="defer"
+NMR_REASON_ACTION_HUMAN_HOLD="human-hold"
+NMR_REASON_ACTION_STRUCTURAL_BLOCK="structural-block"
 NMR_TRANSITION_TRUSTED_CLEAR="trusted-clear"
+NMR_TRANSITION_TRUSTED_DEFER="trusted-defer"
 NMR_TRANSITION_TRUSTED_HOLD="trusted-hold"
+NMR_TRANSITION_TRUSTED_BLOCKED="trusted-blocked"
 NMR_TRANSITION_CRYPTO_APPROVED="crypto-approved"
 NMR_AUTO_RESULT_NORMALIZED="normalized"
 NMR_AUTO_RESULT_APPROVED="approved"
+NMR_BOOL_FALSE="false"
+NMR_STATUS_NONE="none"
 _NMR_AUTO_TRANSITION_RESULT=""
+_NMR_TRUSTED_TRANSITION_OVERRIDE=""
+_NMR_FORCE_AVAILABLE=0
 
 _nmr_metadata_json() {
 	local code="$1"
@@ -295,10 +306,11 @@ _nmr_issue_author_has_repo_write_authority() {
 
 	[[ -n "$issue_num" && -n "$slug" ]] || return 2
 	issue_meta=$(gh api "$(_nmr_issue_api_path "$issue_num" "$slug")" 2>/dev/null) || return 2
+	_nmr_issue_metadata_has_valid_labels "$issue_meta" || return 2
 	# A trusted bot may have generated this issue from an external contribution.
 	# The explicit provenance label keeps that source authority gate intact.
 	if printf '%s' "$issue_meta" | jq -e \
-		'[.labels[]?.name] | index("external-contributor") != null' >/dev/null 2>&1; then
+		'[.labels[].name] | index("external-contributor") != null' >/dev/null 2>&1; then
 		return 1
 	fi
 	identity=$(printf '%s' "$issue_meta" | jq -r '
@@ -376,8 +388,9 @@ issue_has_required_approval() {
 # afternoon before the loop was diagnosed.
 #
 # Breaker trip detection lives in `_nmr_application_is_circuit_breaker_trip`
-# below. `_nmr_applied_by_maintainer` consults both helpers so legacy machine
-# failures cannot blind-redispatch while current producers use structural state.
+# below. `_nmr_applied_by_maintainer` uses signatures for audit context only;
+# missing provenance never proves a human decision. Independent breaker evidence
+# prevents blind redispatch while current producers use structural state.
 #
 # Automation signatures detected (t2686/GH#29151 extended set):
 #   - source:review-scanner                 — GH#18538 post-merge-review-scanner.sh (comment marker)
@@ -395,7 +408,7 @@ issue_has_required_approval() {
 #
 # Exit codes:
 #   0 - trusted automation signature found (safe to auto-clear after other gates)
-#   1 - no trusted automation signature (NMR is manual, unknown, or a breaker trip)
+#   1 - no trusted automation signature; absence does not prove human intent
 #######################################
 _nmr_application_has_automation_signature() {
 	local issue_num="$1"
@@ -451,7 +464,7 @@ _nmr_application_has_automation_signature() {
 	#
 	# GH#20758: Co-temporality guard — scanner labels persist for the life
 	# of the issue, so a label-only match without timing verification
-	# misclassifies later NMR events (manual holds, breaker trips) as
+	# misclassifies later NMR events (explicit reasons, breaker trips) as
 	# creation defaults. Only match when NMR was applied within 300s of
 	# issue creation. This closes the ever-NMR trap for scanner-labelled
 	# issues that subsequently trip a circuit breaker.
@@ -474,7 +487,8 @@ _nmr_application_has_automation_signature() {
 	if [[ "$has_bot_label" -gt 0 ]]; then
 		# Co-temporality check: NMR must have been applied within 300s of
 		# issue creation to classify as a creation default. Later NMR events
-		# on the same issue are either manual holds or breaker trips.
+		# require independent reason or breaker evidence; timing alone never
+		# proves a human hold.
 		local issue_created_at
 		issue_created_at=$(printf '%s' "$issue_meta_json" \
 			| jq -r '.created_at // ""' 2>/dev/null) || issue_created_at=""
@@ -521,6 +535,7 @@ _nmr_application_has_automation_signature() {
 # Exit codes:
 #   0 - legacy breaker-trip signature found (structural hold must be preserved)
 #   1 - no breaker-trip signature
+#   2 - comment evidence unavailable or malformed (defer normalization)
 #######################################
 _nmr_application_is_circuit_breaker_trip() {
 	local issue_num="$1"
@@ -545,10 +560,8 @@ _nmr_application_is_circuit_breaker_trip() {
 	local comments_api
 	printf -v comments_api 'repos/%s/issues/%s/comments' "$slug" "$issue_num"
 	local comments_json
-	comments_json=$(gh api "$comments_api" --paginate --slurp 2>/dev/null) || comments_json="[]"
-	if [[ -z "$comments_json" || "$comments_json" == "null" ]]; then
-		comments_json="[]"
-	fi
+	comments_json=$(gh api "$comments_api" --paginate --slurp 2>/dev/null) || return 2
+	[[ -n "$comments_json" && "$comments_json" != "null" ]] || return 2
 
 	local breaker_pattern='stale-recovery-tick:escalated|cost-circuit-breaker:fired|cost-circuit-breaker:no_work_loop|dispatch-backoff:rate_limit_nmr|dispatch-infrastructure-failure|dispatch-circuit-breaker:worker_recovery_loop|circuit-breaker-escalated|circuit-breaker-meta-filed'
 	local has_breaker_trip
@@ -566,8 +579,8 @@ _nmr_application_is_circuit_breaker_trip() {
 			| select((.body // "") | test($breaker_pattern))
 		]
 		| length
-	' 2>/dev/null) || has_breaker_trip=0
-	[[ "$has_breaker_trip" =~ ^[0-9]+$ ]] || has_breaker_trip=0
+	' 2>/dev/null) || return 2
+	[[ "$has_breaker_trip" =~ ^[0-9]+$ ]] || return 2
 
 	if [[ "$has_breaker_trip" -gt 0 ]]; then
 		return 0
@@ -597,6 +610,7 @@ _nmr_application_is_circuit_breaker_trip() {
 # Exit codes:
 #   0 - prior breaker marker found (preserve NMR unless release retry applies)
 #   1 - no prior breaker marker found
+#   2 - comment evidence unavailable or malformed (defer normalization)
 #######################################
 _nmr_application_has_breaker_history() {
 	local issue_num="$1"
@@ -608,10 +622,8 @@ _nmr_application_has_breaker_history() {
 	local comments_api
 	printf -v comments_api 'repos/%s/issues/%s/comments' "$slug" "$issue_num"
 	local comments_json
-	comments_json=$(gh api "$comments_api" --paginate --slurp 2>/dev/null) || comments_json="[]"
-	if [[ -z "$comments_json" || "$comments_json" == "null" ]]; then
-		comments_json="[]"
-	fi
+	comments_json=$(gh api "$comments_api" --paginate --slurp 2>/dev/null) || return 2
+	[[ -n "$comments_json" && "$comments_json" != "null" ]] || return 2
 
 	local breaker_pattern='stale-recovery-tick:escalated|cost-circuit-breaker:fired|cost-circuit-breaker:no_work_loop|dispatch-backoff:rate_limit_nmr|dispatch-infrastructure-failure|dispatch-circuit-breaker:worker_recovery_loop|circuit-breaker-escalated|circuit-breaker-meta-filed'
 	local has_breaker_history
@@ -628,14 +640,32 @@ _nmr_application_has_breaker_history() {
 			| select((.body // "") | test($breaker_pattern))
 		]
 		| length
-	' 2>/dev/null) || has_breaker_history=0
-	[[ "$has_breaker_history" =~ ^[0-9]+$ ]] || has_breaker_history=0
+	' 2>/dev/null) || return 2
+	[[ "$has_breaker_history" =~ ^[0-9]+$ ]] || return 2
 
 	if [[ "$has_breaker_history" -gt 0 ]]; then
 		return 0
 	fi
 
 	return 1
+}
+
+#######################################
+# Validate the live issue-label contract before making trust or lifecycle
+# decisions. Missing/null labels must not be interpreted as an empty set.
+# Args: issue metadata JSON
+#######################################
+_nmr_issue_metadata_has_valid_labels() {
+	local issue_meta_json="$1"
+	[[ -n "$issue_meta_json" ]] || return 1
+	printf '%s' "$issue_meta_json" | jq -e '
+		type == "object"
+		and ((.labels | type) == "array")
+		and all(.labels[];
+			if type == "object" then ((.name | type) == "string" and (.name | length) > 0)
+			else false end)
+	' >/dev/null 2>&1
+	return $?
 }
 
 #######################################
@@ -657,6 +687,7 @@ _nmr_application_has_breaker_history() {
 # Exit codes:
 #   0 - security-sensitive label present (NMR must be preserved)
 #   1 - no security-sensitive label found
+#   2 - current issue evidence unavailable or malformed (defer normalization)
 #######################################
 _nmr_application_is_security_sensitive() {
 	local issue_num="$1"
@@ -669,16 +700,17 @@ _nmr_application_is_security_sensitive() {
 	if [[ -z "$issue_meta_json" ]]; then
 		local issue_api_path
 		printf -v issue_api_path 'repos/%s/issues/%s' "$slug" "$issue_num"
-		issue_meta_json=$(gh api "$issue_api_path" 2>/dev/null) || issue_meta_json=""
+		issue_meta_json=$(gh api "$issue_api_path" 2>/dev/null) || return 2
 	fi
-	[[ -n "$issue_meta_json" ]] || return 1
+	[[ -n "$issue_meta_json" ]] || return 2
+	_nmr_issue_metadata_has_valid_labels "$issue_meta_json" || return 2
 
 	local has_security_label
 	has_security_label=$(printf '%s' "$issue_meta_json" \
 		| jq --arg security_label 'security' --arg security_review_label 'security-review' \
-			'[(.labels // [])[].name] | map(select(. == $security_label or . == $security_review_label)) | length' \
-			2>/dev/null) || has_security_label=0
-	[[ "$has_security_label" =~ ^[0-9]+$ ]] || has_security_label=0
+			'[.labels[].name] | map(select(. == $security_label or . == $security_review_label)) | length' \
+			2>/dev/null) || return 2
+	[[ "$has_security_label" =~ ^[0-9]+$ ]] || return 2
 
 	if [[ "$has_security_label" -gt 0 ]]; then
 		return 0
@@ -951,10 +983,12 @@ _nmr_breaker_release_retry_reason() {
 _nmr_reason_metadata_from_comments() {
 	local comments_json="$1"
 	local revalidate_seconds="$NMR_TEMPORARY_REVALIDATE_SECONDS"
+	local metadata_json=""
 	[[ "$revalidate_seconds" =~ ^[0-9]+$ ]] || revalidate_seconds=3600
-	printf '%s' "$comments_json" | jq -c --argjson revalidate "$revalidate_seconds" \
-		-f "$NMR_REASON_FILTER" 2>/dev/null || \
-		_nmr_metadata_json "$NMR_REASON_AUTHORITY" "$NMR_CLASS_GENUINE_AUTHORITY" "$NMR_SOURCE_DEFAULT" true
+	metadata_json=$(printf '%s' "$comments_json" | jq -c --argjson revalidate "$revalidate_seconds" \
+		-f "$NMR_REASON_FILTER" 2>/dev/null) || return 1
+	[[ -n "$metadata_json" ]] || return 1
+	printf '%s\n' "$metadata_json"
 	return 0
 }
 
@@ -964,9 +998,10 @@ _nmr_reason_metadata() {
 	local comments_json="[]"
 	local comments_path=""
 	comments_path=$(_nmr_issue_api_path "$issue_num" "$slug" "$NMR_API_COMMENTS_SUFFIX")
-	comments_json=$(gh api "$comments_path" --paginate --slurp 2>/dev/null) || comments_json="[]"
+	comments_json=$(gh api "$comments_path" --paginate --slurp 2>/dev/null) || return 1
+	printf '%s' "$comments_json" | jq -e 'arrays' >/dev/null 2>&1 || return 1
 	_nmr_reason_metadata_from_comments "$comments_json"
-	return 0
+	return $?
 }
 
 _nmr_revalidation_due() {
@@ -1055,19 +1090,24 @@ _nmr_emit_decision_packet() {
 	local marker="nmr-decision-packet reason=${reason_code}"
 	local prior_count="0"
 	local comments_path=""
+	local comments_json="[]"
 	comments_path=$(_nmr_issue_api_path "$issue_num" "$slug" "$NMR_API_COMMENTS_SUFFIX")
-	prior_count=$(gh api "$comments_path" --paginate \
-		--jq "[.[] | select((.body // \"\") | contains(\"${marker}\"))] | length" 2>/dev/null) || prior_count=0
-	[[ "$prior_count" =~ ^[0-9]+$ ]] || prior_count=0
+	comments_json=$(gh api "$comments_path" --paginate --slurp 2>/dev/null) || return 0
+	prior_count=$(printf '%s' "$comments_json" | jq -r --arg marker "$marker" '
+		(if type == "array" and (.[0]? | type) == "array" then [.[][]]
+		elif type == "array" then . else [] end)
+		| [.[] | select((.body // "") | contains($marker))] | length
+	' 2>/dev/null) || return 0
+	[[ "$prior_count" =~ ^[0-9]+$ ]] || return 0
 	[[ "$prior_count" -eq 0 ]] || return 0
 	gh_issue_comment "$issue_num" --repo "$slug" --body "<!-- ${marker} -->
 ## Maintainer decision required
 
 - Reason: ${reason_code}
-- Evidence: the current NMR reason is classified as genuine authority, not a transient diagnostic or infrastructure condition.
-- Options: approve with \`sudo aidevops approve issue ${issue_num} ${slug}\`, or document the rejected/alternative direction.
+- Evidence: explicit durable reason metadata requires a human content, policy, security, billing, or authority decision.
+- Options: resolve the decision and remove \`hold-for-review\`, or document the rejected/alternative direction.
 
-Automation will preserve this gate and will not treat elapsed time as approval." 2>/dev/null || true
+Trusted-author normalization will replace NMR with \`hold-for-review\`; elapsed time is never approval." 2>/dev/null || true
 	return 0
 }
 
@@ -1075,9 +1115,10 @@ _nmr_latest_event_json() {
 	local issue_num="$1"
 	local slug="$2"
 	local timeline_path=""
+	local timeline_json=""
 	timeline_path=$(_nmr_issue_api_path "$issue_num" "$slug" "/timeline")
-	gh api "$timeline_path" --paginate --slurp \
-		2>/dev/null | jq -c -f "$NMR_LATEST_EVENT_FILTER" 2>/dev/null
+	timeline_json=$(gh api "$timeline_path" --paginate --slurp 2>/dev/null) || return 1
+	printf '%s' "$timeline_json" | jq -c -f "$NMR_LATEST_EVENT_FILTER" 2>/dev/null
 	return $?
 }
 
@@ -1085,102 +1126,173 @@ _nmr_evaluate_reason_metadata() {
 	local issue_num="$1"
 	local slug="$2"
 	local nmr_at="$3"
-	_NMR_REASON_ACTION="continue"
+	_NMR_REASON_ACTION="$NMR_REASON_ACTION_CONTINUE"
 	_NMR_REASON_OVERRIDE=""
-	[[ -n "$nmr_at" ]] || return 0
 
 	local reason_metadata=""
 	local reason_code=""
 	local reason_class=""
 	local reason_source=""
-	reason_metadata=$(_nmr_reason_metadata "$issue_num" "$slug")
+	if ! reason_metadata=$(_nmr_reason_metadata "$issue_num" "$slug"); then
+		_NMR_REASON_ACTION="$NMR_REASON_ACTION_DEFER"
+		_NMR_REASON_OVERRIDE="reason comments read failed"
+		return 0
+	fi
 	reason_code=$(printf '%s' "$reason_metadata" | jq -r --arg fallback "$NMR_REASON_AUTHORITY" '.code // $fallback' 2>/dev/null) || reason_code="$NMR_REASON_AUTHORITY"
 	reason_class=$(printf '%s' "$reason_metadata" | jq -r --arg fallback "$NMR_CLASS_GENUINE_AUTHORITY" '.class // $fallback' 2>/dev/null) || reason_class="$NMR_CLASS_GENUINE_AUTHORITY"
 	reason_source=$(printf '%s' "$reason_metadata" | jq -r --arg fallback "$NMR_SOURCE_DEFAULT" '.source // $fallback' 2>/dev/null) || reason_source="$NMR_SOURCE_DEFAULT"
 	if [[ "$reason_class" == "$NMR_CLASS_TEMPORARY" ]]; then
-		_nmr_record_revalidation_state "$issue_num" "$slug" "$reason_metadata" "$nmr_at" "scheduled" || true
-		if _nmr_revalidation_due "$reason_metadata" "$nmr_at"; then
+		[[ -n "$nmr_at" ]] && _nmr_record_revalidation_state "$issue_num" "$slug" "$reason_metadata" "$nmr_at" "scheduled" || true
+		if [[ -n "$nmr_at" ]] && _nmr_revalidation_due "$reason_metadata" "$nmr_at"; then
 			local resolved_reason=""
 			resolved_reason=$(_nmr_temporary_assumption_resolved "$issue_num" "$slug" "$reason_code" "$nmr_at") || resolved_reason=""
 			if [[ -n "$resolved_reason" ]]; then
 				#aidevops:trust-boundary -- only trusted markers and existing breaker checks can release temporary NMR
-				_NMR_REASON_ACTION="auto"
+				_NMR_REASON_ACTION="$NMR_REASON_ACTION_AUTO"
 				_NMR_REASON_OVERRIDE="temporary NMR revalidated (${reason_code}): ${resolved_reason}"
 				_nmr_record_revalidation_state "$issue_num" "$slug" "$reason_metadata" "$nmr_at" "automatable" || true
 				return 0
 			fi
 			_nmr_record_revalidation_state "$issue_num" "$slug" "$reason_metadata" "$nmr_at" "rechecked-unresolved" || true
 		fi
-		_NMR_REASON_ACTION="preserve"
+		_NMR_REASON_ACTION="$NMR_REASON_ACTION_STRUCTURAL_BLOCK"
+		_NMR_REASON_OVERRIDE="temporary machine reason becomes status:blocked"
 		return 0
 	fi
 	if [[ "$reason_source" != "$NMR_SOURCE_DEFAULT" ]]; then
 		_nmr_record_revalidation_state "$issue_num" "$slug" "$reason_metadata" "$nmr_at" "$NMR_STATUS_HUMAN_AUTHORITY" || true
 		_nmr_emit_decision_packet "$issue_num" "$slug" "$reason_code" || true
-		_NMR_REASON_ACTION="preserve"
+		_NMR_REASON_ACTION="$NMR_REASON_ACTION_HUMAN_HOLD"
+		_NMR_REASON_OVERRIDE="explicit human-authority reason becomes hold-for-review"
 	fi
 	return 0
 }
 
-#######################################
-# Classify the latest NMR label event as a manual maintainer hold.
-#
-# Arguments:
-#   $1 - issue_num : GitHub issue number
-#   $2 - slug      : repo slug (owner/repo)
-#   $3 - nmr_actor : actor from the latest NMR label event
-#   $4 - nmr_at    : timestamp of the latest NMR label event
-#
-# Returns 0 when NMR must be preserved, 1 when auto-clear is allowed.
-#######################################
-_nmr_actor_event_is_manual_hold() {
+_nmr_evaluate_security_evidence() {
 	local issue_num="$1"
 	local slug="$2"
-	local nmr_actor="$3"
-	local nmr_at="$4"
+	local nmr_at="$3"
+	_NMR_REASON_ACTION="$NMR_REASON_ACTION_CONTINUE"
+	_NMR_REASON_OVERRIDE=""
 
-	[[ -n "$nmr_actor" ]] || return 1
+	local security_rc=0
+	_nmr_application_is_security_sensitive "$issue_num" "$slug" || security_rc=$?
+	if [[ "$security_rc" -gt 1 ]]; then
+		_NMR_REASON_ACTION="$NMR_REASON_ACTION_DEFER"
+		_NMR_REASON_OVERRIDE="security state read failed"
+		return 0
+	fi
+	if [[ "$security_rc" -eq 0 ]]; then
+		local security_metadata=""
+		security_metadata=$(_nmr_metadata_json "security" "$NMR_CLASS_GENUINE_AUTHORITY" "security-label" true)
+		_nmr_record_revalidation_state "$issue_num" "$slug" "$security_metadata" "$nmr_at" "$NMR_STATUS_HUMAN_AUTHORITY" || true
+		_nmr_emit_decision_packet "$issue_num" "$slug" "security" || true
+		_NMR_REASON_ACTION="$NMR_REASON_ACTION_HUMAN_HOLD"
+		_NMR_REASON_OVERRIDE="security-sensitive label present; preserving review-hold semantics"
+	fi
+	return 0
+}
 
-	local nmr_actor_authority_rc=0
-	#aidevops:trust-boundary -- a transient authority lookup must preserve an
-	# identified actor's review-hold intent rather than silently treating it as automation.
-	_gh_actor_has_repo_write_authority "$slug" "$nmr_actor" "COLLABORATOR" || nmr_actor_authority_rc=$?
-	case "$nmr_actor_authority_rc" in
-	0) ;;
-	1) return 1 ;;
-	*)
-		echo "[pulse-wrapper] _nmr_applied_by_maintainer: #${issue_num} in ${slug} — authority lookup failed for actor=${nmr_actor}; preserving hold semantics" >>"$LOGFILE"
+_nmr_apply_trusted_classification_action() {
+	local issue_num="$1"
+	local slug="$2"
+	case "$_NMR_REASON_ACTION" in
+	"$NMR_REASON_ACTION_DEFER")
+		_nmr_defer_trusted_normalization "$issue_num" "$slug" "${_NMR_REASON_OVERRIDE:-required evidence unavailable}"
+		return 0
+		;;
+	"$NMR_REASON_ACTION_AUTO")
+		_NMR_AUTO_APPROVAL_REASON_OVERRIDE="$_NMR_REASON_OVERRIDE"
+		_NMR_FORCE_AVAILABLE=1
+		echo "[pulse-wrapper] _nmr_applied_by_maintainer: #${issue_num} in ${slug} — ${_NMR_REASON_OVERRIDE}; allowing trusted maintainer-authored retry" >>"$LOGFILE"
+		return 1
+		;;
+	"$NMR_REASON_ACTION_HUMAN_HOLD")
+		_NMR_TRUSTED_TRANSITION_OVERRIDE="$NMR_TRANSITION_TRUSTED_HOLD"
+		echo "[pulse-wrapper] _nmr_applied_by_maintainer: #${issue_num} in ${slug} — ${_NMR_REASON_OVERRIDE}" >>"$LOGFILE"
+		return 0
+		;;
+	"$NMR_REASON_ACTION_STRUCTURAL_BLOCK")
+		_NMR_TRUSTED_TRANSITION_OVERRIDE="$NMR_TRANSITION_TRUSTED_BLOCKED"
+		echo "[pulse-wrapper] _nmr_applied_by_maintainer: #${issue_num} in ${slug} — ${_NMR_REASON_OVERRIDE}" >>"$LOGFILE"
 		return 0
 		;;
 	esac
+	return 2
+}
 
-	if [[ -n "$nmr_at" ]] && _nmr_application_has_automation_signature "$issue_num" "$slug" "$nmr_at" "$nmr_actor"; then
-		echo "[pulse-wrapper] _nmr_applied_by_maintainer: #${issue_num} in ${slug} — write-authorized actor=${nmr_actor} but trusted automation signature detected — classifying as automation-applied (GH#18671/GH#29151)" >>"$LOGFILE"
-		return 1
+_nmr_evaluate_legacy_state_evidence() {
+	local issue_num="$1"
+	local slug="$2"
+	local nmr_at="$3"
+	local nmr_actor="$4"
+	_NMR_REASON_ACTION="$NMR_REASON_ACTION_CONTINUE"
+	_NMR_REASON_OVERRIDE=""
+
+	local breaker_trip_rc=0
+	_nmr_application_is_circuit_breaker_trip "$issue_num" "$slug" "$nmr_at" || breaker_trip_rc=$?
+	if [[ "$breaker_trip_rc" -gt 1 ]]; then
+		_NMR_REASON_ACTION="$NMR_REASON_ACTION_DEFER"
+		_NMR_REASON_OVERRIDE="breaker comments read failed"
+		return 0
+	fi
+	if [[ "$breaker_trip_rc" -eq 0 ]]; then
+		local release_retry_reason=""
+		release_retry_reason=$(_nmr_breaker_release_retry_reason "$issue_num" "$slug" "$nmr_at") || release_retry_reason=""
+		if [[ -n "$release_retry_reason" ]]; then
+			_NMR_REASON_ACTION="$NMR_REASON_ACTION_AUTO"
+			_NMR_REASON_OVERRIDE="$release_retry_reason"
+			return 0
+		fi
+		_NMR_REASON_ACTION="$NMR_REASON_ACTION_STRUCTURAL_BLOCK"
+		_NMR_REASON_OVERRIDE="legacy circuit breaker tripped by actor=${nmr_actor:-unknown}; preserving structural state (t2386/t3566)"
+		_notify_stale_recovery_resolved_by_pr "$issue_num" "$slug" "$nmr_at" || true
+		return 0
 	fi
 
-	local authority_metadata=""
-	authority_metadata=$(_nmr_metadata_json "$NMR_REASON_AUTHORITY" "$NMR_CLASS_GENUINE_AUTHORITY" "manual-hold" true)
-	_nmr_record_revalidation_state "$issue_num" "$slug" "$authority_metadata" "$nmr_at" "$NMR_STATUS_HUMAN_AUTHORITY" || true
-	_nmr_emit_decision_packet "$issue_num" "$slug" "$NMR_REASON_AUTHORITY" || true
+	local breaker_history_rc=0
+	_nmr_application_has_breaker_history "$issue_num" "$slug" "$nmr_at" || breaker_history_rc=$?
+	if [[ "$breaker_history_rc" -gt 1 ]]; then
+		_NMR_REASON_ACTION="$NMR_REASON_ACTION_DEFER"
+		_NMR_REASON_OVERRIDE="breaker history read failed"
+		return 0
+	fi
+	if [[ "$breaker_history_rc" -eq 0 ]]; then
+		local history_retry_reason=""
+		history_retry_reason=$(_nmr_breaker_release_retry_reason "$issue_num" "$slug" "$nmr_at") || history_retry_reason=""
+		if [[ -n "$history_retry_reason" ]]; then
+			_NMR_REASON_ACTION="$NMR_REASON_ACTION_AUTO"
+			_NMR_REASON_OVERRIDE="prior breaker marker found; ${history_retry_reason}"
+			return 0
+		fi
+		_NMR_REASON_ACTION="$NMR_REASON_ACTION_STRUCTURAL_BLOCK"
+		_NMR_REASON_OVERRIDE="prior circuit breaker remains active after relabel by actor=${nmr_actor:-unknown}; preserving structural state (t2386/t3566)"
+		_notify_stale_recovery_resolved_by_pr "$issue_num" "$slug" "$nmr_at" || true
+		return 0
+	fi
+
+	return 0
+}
+
+_nmr_defer_trusted_normalization() {
+	local issue_num="$1"
+	local slug="$2"
+	local reason="$3"
+	_NMR_TRUSTED_TRANSITION_OVERRIDE="$NMR_TRANSITION_TRUSTED_DEFER"
+	echo "[pulse-wrapper] _nmr_applied_by_maintainer: #${issue_num} in ${slug} — evidence unavailable (${reason}); leaving NMR unchanged" >>"$LOGFILE"
 	return 0
 }
 
 #######################################
-# Classify a trusted-author NMR application as an intentional hold or safe
-# automation residue. Intentional/legacy breaker state becomes an internal hold;
-# creation-default residue can be removed without self-approval.
+# Classify trusted-author NMR using explicit durable evidence. Structured
+# human-authority/security reasons become internal review holds; machine
+# breakers become structural blocks; unreasoned NMR is removed.
 #
 # GH#18671 / t2386: the pulse runs as a write-authorized GitHub token,
-# so a maintainer-equivalent label actor matches all three cases:
-#   1. Human maintainer clicks the label (manual hold)
-#   2. Pulse scanner applies default NMR at creation (auto-clear OK)
-#   3. Circuit breaker trips (t2007 cost / t2008 stale) — MUST preserve
-#   4. Security-sensitive automation applies NMR — MUST preserve
-#
-# Cases 1, 3, and 4 are "preserve hold semantics" (return 0); case 2 is
-# "trusted normalization may clear" (return 1). Companion helpers provide
-# `_nmr_application_has_automation_signature` (creation defaults),
+# so actor identity cannot distinguish a human click from shared-token
+# automation. Missing automation provenance is therefore never hold evidence.
+# Companion helpers provide `_nmr_application_has_automation_signature`
+# (diagnostic provenance),
 # `_nmr_application_is_circuit_breaker_trip` (breaker trips), and
 # `_nmr_application_is_security_sensitive` (security review boundary).
 # See t2386 brief for the #19756 infinite-loop incident that motivated
@@ -1191,87 +1303,67 @@ _nmr_actor_event_is_manual_hold() {
 #   $2 - slug       : repo slug (owner/repo)
 #   $3 - maintainer : maintainer GitHub login
 #
-# Returns 0 for an intentional/manual, breaker, or security hold.
-# Returns 1 for trusted automation residue that may be removed without an
-#           approval marker.
+# Returns 0 for explicit human holds, structural blockers, or evidence
+# uncertainty, with `_NMR_TRUSTED_TRANSITION_OVERRIDE` selecting the transition.
+# Returns 1 for unreasoned trusted-author NMR that may be removed without an
+# approval marker.
 #######################################
 _nmr_applied_by_maintainer() {
 	local issue_num="$1"
 	local slug="$2"
 	local maintainer="$3"
 	_NMR_AUTO_APPROVAL_REASON_OVERRIDE=""
+	_NMR_TRUSTED_TRANSITION_OVERRIDE=""
+	_NMR_FORCE_AVAILABLE=0
 
 	[[ -n "$issue_num" && -n "$slug" && -n "$maintainer" ]] || return 1
 
 	# Fetch both actor and creation timestamp of the latest NMR label event.
 	local nmr_event_json=""
-	nmr_event_json=$(_nmr_latest_event_json "$issue_num" "$slug") || nmr_event_json=""
+	if ! nmr_event_json=$(_nmr_latest_event_json "$issue_num" "$slug"); then
+		_nmr_defer_trusted_normalization "$issue_num" "$slug" "timeline read failed"
+		return 0
+	fi
 
 	local nmr_actor nmr_at
 	nmr_actor=$(printf '%s' "$nmr_event_json" | jq -r '.actor // ""' 2>/dev/null) || nmr_actor=""
 	nmr_at=$(printf '%s' "$nmr_event_json" | jq -r '.at // ""' 2>/dev/null) || nmr_at=""
+	if [[ -z "$nmr_at" ]]; then
+		_nmr_defer_trusted_normalization "$issue_num" "$slug" "latest NMR event missing"
+		return 0
+	fi
+
+	# Security is an independent durable hold and takes precedence over temporary
+	# reason recovery or machine-breaker normalization.
+	_nmr_evaluate_security_evidence "$issue_num" "$slug" "$nmr_at"
+	local action_rc=0
+	_nmr_apply_trusted_classification_action "$issue_num" "$slug" || action_rc=$?
+	if [[ "$action_rc" -ne 2 ]]; then
+		return "$action_rc"
+	fi
 
 	_nmr_evaluate_reason_metadata "$issue_num" "$slug" "$nmr_at"
-	case "$_NMR_REASON_ACTION" in
-		auto)
-			_NMR_AUTO_APPROVAL_REASON_OVERRIDE="$_NMR_REASON_OVERRIDE"
-			echo "[pulse-wrapper] _nmr_applied_by_maintainer: #${issue_num} in ${slug} — temporary NMR revalidated; allowing trusted maintainer-authored retry" >>"$LOGFILE"
-			return 1
-			;;
-		preserve)
-			echo "[pulse-wrapper] _nmr_applied_by_maintainer: #${issue_num} in ${slug} — reason-coded NMR remains gated" >>"$LOGFILE"
-			return 0
-			;;
-	esac
+	action_rc=0
+	_nmr_apply_trusted_classification_action "$issue_num" "$slug" || action_rc=$?
+	if [[ "$action_rc" -ne 2 ]]; then
+		return "$action_rc"
+	fi
 
 	# Breaker signatures are authoritative regardless of the token actor. Pulse can
 	# run under any trusted maintainer/member account, so actor-gating this check
 	# lets a peer runner's dispatch-infrastructure/no_work breaker be auto-cleared
 	# by maintainer auto-approval and re-enter the loop.
-	if [[ -n "$nmr_at" ]]; then
-		if _nmr_application_is_circuit_breaker_trip "$issue_num" "$slug" "$nmr_at"; then
-			local release_retry_reason=""
-			release_retry_reason=$(_nmr_breaker_release_retry_reason "$issue_num" "$slug" "$nmr_at") || release_retry_reason=""
-			if [[ -n "$release_retry_reason" ]]; then
-				_NMR_AUTO_APPROVAL_REASON_OVERRIDE="$release_retry_reason"
-				echo "[pulse-wrapper] _nmr_applied_by_maintainer: #${issue_num} in ${slug} — ${release_retry_reason}; allowing one auto-approval retry" >>"$LOGFILE"
-				return 1
-			fi
-			echo "[pulse-wrapper] _nmr_applied_by_maintainer: #${issue_num} in ${slug} — legacy circuit breaker tripped by actor=${nmr_actor:-unknown}; preserving structural hold semantics for trusted-author normalization (t2386/t3566)" >>"$LOGFILE"
-			# t3049: check if a subsequent worker produced a clean approved PR
-			# that resolves the stale-recovery false positive. Posts a one-shot
-			# notification to the maintainer if so. Does NOT clear NMR.
-			_notify_stale_recovery_resolved_by_pr "$issue_num" "$slug" "$nmr_at" || true
-			return 0
-		fi
+	_nmr_evaluate_legacy_state_evidence "$issue_num" "$slug" "$nmr_at" "$nmr_actor"
+	action_rc=0
+	_nmr_apply_trusted_classification_action "$issue_num" "$slug" || action_rc=$?
+	if [[ "$action_rc" -ne 2 ]]; then
+		return "$action_rc"
 	fi
 
-	if [[ -n "$nmr_at" ]]; then
-		if _nmr_application_has_breaker_history "$issue_num" "$slug" "$nmr_at"; then
-			local history_retry_reason=""
-			history_retry_reason=$(_nmr_breaker_release_retry_reason "$issue_num" "$slug" "$nmr_at") || history_retry_reason=""
-			if [[ -n "$history_retry_reason" ]]; then
-				_NMR_AUTO_APPROVAL_REASON_OVERRIDE="$history_retry_reason"
-				echo "[pulse-wrapper] _nmr_applied_by_maintainer: #${issue_num} in ${slug} — prior breaker marker found; ${history_retry_reason}; allowing one auto-approval retry" >>"$LOGFILE"
-				return 1
-			fi
-			echo "[pulse-wrapper] _nmr_applied_by_maintainer: #${issue_num} in ${slug} — prior circuit breaker marker remains active after latest NMR relabel by actor=${nmr_actor:-unknown}; preserving structural hold semantics for trusted-author normalization (t2386/t3566)" >>"$LOGFILE"
-			_notify_stale_recovery_resolved_by_pr "$issue_num" "$slug" "$nmr_at" || true
-			return 0
-		fi
-	fi
-
-	if _nmr_application_is_security_sensitive "$issue_num" "$slug"; then
-		local security_metadata=""
-		security_metadata=$(_nmr_metadata_json "security" "$NMR_CLASS_GENUINE_AUTHORITY" "security-label" true)
-		_nmr_record_revalidation_state "$issue_num" "$slug" "$security_metadata" "$nmr_at" "$NMR_STATUS_HUMAN_AUTHORITY" || true
-		_nmr_emit_decision_packet "$issue_num" "$slug" "security" || true
-		echo "[pulse-wrapper] _nmr_applied_by_maintainer: #${issue_num} in ${slug} — security-sensitive label present; preserving review-hold semantics for trusted-author normalization" >>"$LOGFILE"
-		return 0
-	fi
-
-	if _nmr_actor_event_is_manual_hold "$issue_num" "$slug" "$nmr_actor" "$nmr_at"; then
-		return 0
+	if [[ -n "$nmr_at" ]] && _nmr_application_has_automation_signature "$issue_num" "$slug" "$nmr_at" "$nmr_actor"; then
+		echo "[pulse-wrapper] _nmr_applied_by_maintainer: #${issue_num} in ${slug} — legacy automation provenance confirmed; normalizing trusted-author NMR" >>"$LOGFILE"
+	else
+		echo "[pulse-wrapper] _nmr_applied_by_maintainer: #${issue_num} in ${slug} — no explicit hold evidence; actor/provenance ambiguity cannot manufacture human intent" >>"$LOGFILE"
 	fi
 	return 1
 }
@@ -1397,8 +1489,12 @@ _nmr_current_actor_can_post_maintainer_approval() {
 		echo "[pulse-wrapper] trusted-author NMR normalization deferred for #${issue_num} in ${slug}: live issue metadata lookup failed" >>"$LOGFILE"
 		return 1
 	fi
+	if ! _nmr_issue_metadata_has_valid_labels "$issue_meta"; then
+		echo "[pulse-wrapper] trusted-author NMR normalization deferred for #${issue_num} in ${slug}: live issue labels are incomplete or malformed" >>"$LOGFILE"
+		return 1
+	fi
 	if printf '%s' "$issue_meta" | jq -e \
-		'[.labels[]?.name] | index("external-contributor") != null' >/dev/null 2>&1; then
+		'[.labels[].name] | index("external-contributor") != null' >/dev/null 2>&1; then
 		echo "[pulse-wrapper] trusted-author NMR normalization skipped for #${issue_num} in ${slug}: explicit external-contributor provenance requires approval" >>"$LOGFILE"
 		return 1
 	fi
@@ -1755,45 +1851,150 @@ Knowledge source \`${source_id}\` promoted from staging to \`sources/\` after cr
 	return 0
 }
 
+_nmr_edit_issue_labels() {
+	local issue_num="$1"
+	local slug="$2"
+	shift 2
+	if declare -F gh_issue_edit_safe >/dev/null 2>&1; then
+		gh_issue_edit_safe "$issue_num" --repo "$slug" "$@" >/dev/null 2>&1
+		return $?
+	fi
+	gh issue edit "$issue_num" --repo "$slug" "$@" >/dev/null 2>&1
+	return $?
+}
+
+_nmr_issue_label_state() {
+	local issue_num="$1"
+	local slug="$2"
+	local issue_json=""
+	issue_json=$(gh api "$(_nmr_issue_api_path "$issue_num" "$slug")" 2>/dev/null) || return 1
+	_nmr_issue_metadata_has_valid_labels "$issue_json" || return 1
+	printf '%s' "$issue_json" | jq -r --arg no_status "$NMR_STATUS_NONE" '
+		[.labels[].name] as $labels
+		| [$labels[] | select(startswith("status:"))] as $statuses
+		| if ($statuses | length) > 1 then error("conflicting lifecycle statuses")
+		else [
+			($statuses[0] // $no_status),
+			(any($labels[];
+				. == "hold-for-review" or . == "no-auto-dispatch" or
+				. == "needs-credentials" or . == "needs-maintainer-permissions")),
+			(any($labels[];
+				. == "parent-task" or . == "meta" or . == "persistent" or
+				. == "supervisor" or . == "contributor" or . == "quality-review" or
+				. == "routine-tracking" or
+				. == "status:done" or . == "status:resolved"))
+		] | @tsv end
+	' 2>/dev/null
+	return $?
+}
+
+_nmr_set_transition_status() {
+	local issue_num="$1"
+	local slug="$2"
+	local target_status_name="$3"
+	local current_status="$4"
+	local target_status="status:${target_status_name}"
+	local applied_state=""
+	local applied_status=""
+	local applied_manual_suppress=""
+	local applied_terminal_suppress=""
+
+	[[ "$current_status" == "$target_status" ]] && return 0
+	if declare -F set_issue_status >/dev/null 2>&1; then
+		set_issue_status "$issue_num" "$slug" "$target_status_name" >/dev/null 2>&1 || return 1
+	else
+		local -a status_flags=(--add-label "$target_status")
+		if [[ "$current_status" == status:* ]]; then
+			status_flags+=(--remove-label "$current_status")
+		fi
+		_nmr_edit_issue_labels "$issue_num" "$slug" "${status_flags[@]}" || return 1
+	fi
+	applied_state=$(_nmr_issue_label_state "$issue_num" "$slug") || return 1
+	IFS=$'\t' read -r applied_status applied_manual_suppress applied_terminal_suppress <<<"$applied_state"
+	: "$applied_manual_suppress" "$applied_terminal_suppress"
+	[[ "$applied_status" == "$target_status" ]]
+	return $?
+}
+
 #######################################
-# Restore the complete dispatchable state after trusted-author normalization or
-# verified external approval. Legacy stale escalation removed both core status
-# labels and auto-dispatch, so this transition is self-contained.
+# Remove trusted-author NMR while preserving live lifecycle status. Add the
+# normal dispatch intent only when the issue is not an explicit hold/tracker.
+# Legacy paths with no status regain status:available; resolved temporary
+# blockers may explicitly force available through _NMR_FORCE_AVAILABLE.
 # Args: issue number, repo slug
 #######################################
 _nmr_restore_dispatchable_state() {
 	local issue_num="$1"
 	local slug="$2"
-	if declare -F set_issue_status >/dev/null 2>&1; then
-		set_issue_status "$issue_num" "$slug" "available" \
-			--remove-label "needs-maintainer-review" \
-			--add-label "auto-dispatch" >/dev/null 2>&1
+	local label_state=""
+	local current_status=""
+	local manual_suppress=""
+	local terminal_suppress=""
+	label_state=$(_nmr_issue_label_state "$issue_num" "$slug") || return 1
+	IFS=$'\t' read -r current_status manual_suppress terminal_suppress <<<"$label_state"
+	[[ "$current_status" == "$NMR_STATUS_NONE" || "$current_status" == status:* ]] || return 1
+	[[ "$manual_suppress" =~ ^(true|false)$ && "$terminal_suppress" =~ ^(true|false)$ ]] || return 1
+
+	local -a label_flags=(--remove-label "needs-maintainer-review")
+	if [[ "$manual_suppress" == "$NMR_BOOL_FALSE" && "$terminal_suppress" == "$NMR_BOOL_FALSE" ]]; then
+		label_flags+=(--add-label "auto-dispatch")
+	fi
+	if [[ "$manual_suppress" == "true" || "$terminal_suppress" == "true" ]]; then
+		_nmr_edit_issue_labels "$issue_num" "$slug" "${label_flags[@]}"
 		return $?
 	fi
-	gh issue edit "$issue_num" --repo "$slug" \
-		--remove-label "needs-maintainer-review" \
-		--add-label "status:available,auto-dispatch" >/dev/null 2>&1
+	local should_set_available=0
+	if [[ "$current_status" == "$NMR_STATUS_NONE" || ( "$_NMR_FORCE_AVAILABLE" -eq 1 && "$current_status" == "status:blocked" ) ]]; then
+		should_set_available=1
+	fi
+	if [[ "$should_set_available" -eq 1 ]]; then
+		_nmr_set_transition_status "$issue_num" "$slug" "available" "$current_status" || return 1
+	fi
+	_nmr_edit_issue_labels "$issue_num" "$slug" "${label_flags[@]}"
 	return $?
 }
 
 #######################################
-# Preserve intentional hold semantics while removing NMR from a trusted-author
-# issue. NMR is only an external trust gate; hold-for-review is the explicit
-# internal/manual hold.
+# Translate explicit human-decision evidence without changing status:* state.
 # Args: issue number, repo slug
 #######################################
 _nmr_translate_trusted_author_hold() {
 	local issue_num="$1"
 	local slug="$2"
-	if declare -F set_issue_status >/dev/null 2>&1; then
-		set_issue_status "$issue_num" "$slug" "" \
-			--remove-label "needs-maintainer-review" \
-			--add-label "hold-for-review" >/dev/null 2>&1
+	_nmr_edit_issue_labels "$issue_num" "$slug" \
+		--remove-label "needs-maintainer-review" \
+		--add-label "hold-for-review"
+	return $?
+}
+
+#######################################
+# Convert legacy machine-failure NMR to structural lifecycle state, not a human
+# review hold. Terminal trackers remain untouched; independent manual
+# suppressors remain while machine state still converges to status:blocked.
+# Args: issue number, repo slug
+#######################################
+_nmr_translate_trusted_author_blocked() {
+	local issue_num="$1"
+	local slug="$2"
+	local label_state=""
+	local current_status=""
+	local manual_suppress=""
+	local terminal_suppress=""
+	label_state=$(_nmr_issue_label_state "$issue_num" "$slug") || return 1
+	IFS=$'\t' read -r current_status manual_suppress terminal_suppress <<<"$label_state"
+	[[ "$current_status" == "$NMR_STATUS_NONE" || "$current_status" == status:* ]] || return 1
+	[[ "$manual_suppress" =~ ^(true|false)$ && "$terminal_suppress" =~ ^(true|false)$ ]] || return 1
+
+	local -a label_flags=(--remove-label "needs-maintainer-review")
+	if [[ "$terminal_suppress" == "true" ]]; then
+		_nmr_edit_issue_labels "$issue_num" "$slug" "${label_flags[@]}"
 		return $?
 	fi
-	gh issue edit "$issue_num" --repo "$slug" \
-		--remove-label "needs-maintainer-review" \
-		--add-label "hold-for-review" >/dev/null 2>&1
+	if [[ "$manual_suppress" == "$NMR_BOOL_FALSE" ]]; then
+		label_flags+=(--add-label "auto-dispatch")
+	fi
+	_nmr_set_transition_status "$issue_num" "$slug" "blocked" "$current_status" || return 1
+	_nmr_edit_issue_labels "$issue_num" "$slug" "${label_flags[@]}"
 	return $?
 }
 
@@ -1811,6 +2012,9 @@ _nmr_apply_auto_approval_transition() {
 	_NMR_AUTO_TRANSITION_RESULT=""
 
 	case "$transition_kind" in
+	"$NMR_TRANSITION_TRUSTED_DEFER")
+		echo "[pulse-wrapper] Deferred trusted-author NMR normalization on #${issue_num} in ${slug} — incomplete evidence; no labels changed" >>"$LOGFILE"
+		;;
 	"$NMR_TRANSITION_TRUSTED_CLEAR")
 		if _nmr_restore_dispatchable_state "$issue_num" "$slug"; then
 			echo "[pulse-wrapper] Normalized trusted-author NMR on #${issue_num} in ${slug} — ${approval_reason}; no approval marker posted" >>"$LOGFILE"
@@ -1827,7 +2031,21 @@ _nmr_apply_auto_approval_transition() {
 			echo "[pulse-wrapper] Trusted-author hold translation FAILED for #${issue_num} in ${slug}" >>"$LOGFILE"
 		fi
 		;;
+	"$NMR_TRANSITION_TRUSTED_BLOCKED")
+		if _nmr_translate_trusted_author_blocked "$issue_num" "$slug"; then
+			echo "[pulse-wrapper] Translated trusted-author machine NMR on #${issue_num} in ${slug} to status:blocked; no human decision manufactured" >>"$LOGFILE"
+			_NMR_AUTO_TRANSITION_RESULT="$NMR_AUTO_RESULT_NORMALIZED"
+		else
+			echo "[pulse-wrapper] Trusted-author blocked translation FAILED for #${issue_num} in ${slug}" >>"$LOGFILE"
+		fi
+		;;
 	"$NMR_TRANSITION_CRYPTO_APPROVED")
+		local approved_security_rc=0
+		_nmr_application_is_security_sensitive "$issue_num" "$slug" || approved_security_rc=$?
+		if [[ "$approved_security_rc" -gt 1 ]]; then
+			echo "[pulse-wrapper] Auto-approve deferred for #${issue_num} in ${slug} — live security labels unavailable; NMR unchanged" >>"$LOGFILE"
+			return 0
+		fi
 		# Lock before posting the trusted marker so untrusted comments cannot race
 		# the maintainer gate. The worker unlocks after dispatch completes.
 		gh issue lock "$issue_num" --repo "$slug" --reason "resolved" >/dev/null 2>&1 || true
@@ -1838,12 +2056,20 @@ Auto-approved: ${approval_reason}. Stale recovery tick reset." \
 			2>/dev/null || true
 
 		local edit_exit=0
-		_nmr_restore_dispatchable_state "$issue_num" "$slug" || edit_exit=$?
+		if [[ "$approved_security_rc" -eq 0 ]]; then
+			_nmr_translate_trusted_author_hold "$issue_num" "$slug" || edit_exit=$?
+		else
+			_nmr_restore_dispatchable_state "$issue_num" "$slug" || edit_exit=$?
+		fi
 		if [[ "$edit_exit" -eq 0 ]]; then
 			_NMR_AUTO_TRANSITION_RESULT="$NMR_AUTO_RESULT_APPROVED"
-			echo "[pulse-wrapper] Auto-approved #${issue_num} in ${slug} — ${approval_reason} (locked + approval marker + tick reset)" >>"$LOGFILE"
-			# t2845: promote knowledge-review source when applicable.
-			_handle_knowledge_review_promotion "$issue_num" "$slug" || true
+			if [[ "$approved_security_rc" -eq 0 ]]; then
+				echo "[pulse-wrapper] Approved external authority for #${issue_num} in ${slug} — security review remains on hold-for-review" >>"$LOGFILE"
+			else
+				echo "[pulse-wrapper] Auto-approved #${issue_num} in ${slug} — ${approval_reason} (locked + approval marker + tick reset)" >>"$LOGFILE"
+				# t2845: promote knowledge-review source when applicable.
+				_handle_knowledge_review_promotion "$issue_num" "$slug" || true
+			fi
 		else
 			echo "[pulse-wrapper] Auto-approve label update FAILED for #${issue_num} in ${slug} (exit: ${edit_exit}) — approval marker posted but labels unchanged" >>"$LOGFILE"
 		fi
@@ -1862,10 +2088,10 @@ Auto-approved: ${approval_reason}. Stale recovery tick reset." \
 # issue <number>`. This ensures only a human with the system password
 # (and root access to the approval signing key) can approve issues.
 #
-# Write-authorized authors never self-approve. Automation residue is removed
-# without an approval marker; an intentional/manual hold is translated to
-# hold-for-review. Comment-based approval remains forbidden because workers share
-# the same GitHub account and cannot prove human authority.
+# Write-authorized authors never self-approve. Unreasoned residue is removed;
+# explicit durable human-decision evidence becomes hold-for-review; machine
+# failures become status:blocked. Comment-based approval remains forbidden
+# because workers share the same GitHub account and cannot prove human authority.
 #######################################
 auto_approve_maintainer_issues() {
 	local repos_json="$REPOS_JSON"
@@ -1899,17 +2125,29 @@ auto_approve_maintainer_issues() {
 			local transition_kind=""
 			local approval_reason=""
 			_NMR_AUTO_APPROVAL_REASON_OVERRIDE=""
+			_NMR_TRUSTED_TRANSITION_OVERRIDE=""
+			_NMR_FORCE_AVAILABLE=0
 
-			# Case 1: a write-authorized author never needs self-approval. Translate
-			# intentional/manual NMR to hold-for-review; otherwise remove the stray
-			# trust label and restore the dispatchable lifecycle state.
+			# Case 1: a write-authorized author never needs self-approval. Explicit
+			# decision evidence becomes a hold, machine failures become blocked, and
+			# unreasoned trust residue is removed without changing active status.
 			if _nmr_current_actor_can_post_maintainer_approval "$issue_num" "$slug" "$maintainer" "$issue_author"; then
 				if _nmr_applied_by_maintainer "$issue_num" "$slug" "$maintainer"; then
-					transition_kind="$NMR_TRANSITION_TRUSTED_HOLD"
-					approval_reason="trusted-author NMR hold translated to hold-for-review"
+					transition_kind="${_NMR_TRUSTED_TRANSITION_OVERRIDE:-$NMR_TRANSITION_TRUSTED_DEFER}"
+					case "$transition_kind" in
+					"$NMR_TRANSITION_TRUSTED_BLOCKED")
+						approval_reason="trusted-author machine NMR translated to status:blocked"
+						;;
+					"$NMR_TRANSITION_TRUSTED_DEFER")
+						approval_reason="trusted-author evidence incomplete; NMR retained"
+						;;
+					*)
+						approval_reason="explicit trusted-author decision evidence translated to hold-for-review"
+						;;
+					esac
 				else
 					transition_kind="$NMR_TRANSITION_TRUSTED_CLEAR"
-					approval_reason="${_NMR_AUTO_APPROVAL_REASON_OVERRIDE:-write-authorized maintainer is author, NMR applied by automation}"
+					approval_reason="${_NMR_AUTO_APPROVAL_REASON_OVERRIDE:-write-authorized author has no explicit hold evidence}"
 				fi
 			fi
 
