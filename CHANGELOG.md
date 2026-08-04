@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.223] - 2026-08-05
+
+### Added
+
+- define compatibility drift contracts (#29526)
+- define safe reconciliation and rollback contracts (#29528)
+- define adaptive ingress trust contracts (#29518)
+
+### Fixed
+
+- reconcile protected release supersession (#29529)
+- recover split issue sync availability (#29525)
+
 ## [3.32.222] - 2026-08-04
 
 ### Added
