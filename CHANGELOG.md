@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.221] - 2026-08-04
+
+### Added
+
+- define team-interface core contracts (#29505)
+
+### Fixed
+
+- defer pending-publication orphan TODO seeding (#29489)
+- make Cloudron monitor reset-aware (#29488)
+- redact private repositories from audit alerts (#29486)
+- harden failure miner event clustering (#29469)
+- verify trusted NMR audit transitions (#29467)
+
 ## [3.32.220] - 2026-08-04
 
 ### Added
