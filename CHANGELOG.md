@@ -10,9 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.220] - 2026-08-04
+
+### Added
+
+- add bounded beehiiv account collection (#29427)
+
 ### Changed
 
-- Pulse: refill all available worker slots immediately after worker exit (#29448)
+- Maintenance: update aiohttp to 3.14.3 (#29445)
+- CI: add Ubuntu lifecycle smoke gate (#29433)
+
+### Fixed
+
+- update Vault cryptography dependency (#29446)
 
 ## [3.32.219] - 2026-08-03
 
