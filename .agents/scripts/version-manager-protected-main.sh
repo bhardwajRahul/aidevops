@@ -29,12 +29,14 @@ _VERSION_MANAGER_LOCAL_TAG_COMMIT=""
 _VERSION_MANAGER_REMOTE_TAG_OBJECT=""
 _VERSION_MANAGER_REMOTE_TAG_COMMIT=""
 _VERSION_MANAGER_REMOTE_TAG_STATE=""
+_VERSION_MANAGER_PROTECTED_SUPERSESSION_JSON=""
 _VERSION_MANAGER_TAG_STATE_ABSENT="absent"
 _VERSION_MANAGER_TAG_STATE_MATCHING="matching"
 _VERSION_MANAGER_RELEASE_RESULT_QUEUED="queued"
 _VERSION_MANAGER_MODE_RECONCILE="reconcile"
 _VERSION_MANAGER_PR_STATE_OPEN="open"
 _VERSION_MANAGER_PR_STATE_CLOSED="closed"
+_VERSION_MANAGER_TIMESTAMP_REGEX='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
 
 _version_manager_push_requires_pr() {
 	local push_output="$1"
@@ -553,6 +555,23 @@ _version_manager_queue_protected_main_release() {
 	return 0
 }
 
+_version_manager_verify_protected_pr_state() {
+	local pr_state="$1"
+	local merged_at="$2"
+
+	case "$pr_state" in
+	"$_VERSION_MANAGER_PR_STATE_OPEN") [[ -z "$merged_at" ]] || return 1 ;;
+	"$_VERSION_MANAGER_PR_STATE_CLOSED")
+		if [[ ! "$merged_at" =~ $_VERSION_MANAGER_TIMESTAMP_REGEX ]]; then
+			print_error "Protected release PR #${_VERSION_MANAGER_PROTECTED_PR_NUMBER} lacks valid merge evidence"
+			return 1
+		fi
+		;;
+	*) return 1 ;;
+	esac
+	return 0
+}
+
 _version_manager_reconcile_protected_release_tag() {
 	local repo="$1"
 	local tag_name="$2"
@@ -591,14 +610,7 @@ _version_manager_reconcile_protected_release_tag() {
 		"$_VERSION_MANAGER_LOCAL_TAG_OBJECT" "$_VERSION_MANAGER_LOCAL_TAG_COMMIT" || return 1
 	pr_state=$(jq -r '.state // ""' <<<"$_VERSION_MANAGER_PROTECTED_PR_JSON") || return 1
 	merged_at=$(jq -r '.merged_at // ""' <<<"$_VERSION_MANAGER_PROTECTED_PR_JSON") || return 1
-	if [[ "$pr_state" == "$_VERSION_MANAGER_PR_STATE_CLOSED" && -z "$merged_at" ]]; then
-		print_error "Protected release PR #${_VERSION_MANAGER_PROTECTED_PR_NUMBER} closed without merge"
-		return 1
-	fi
-	if [[ "$pr_state" != "$_VERSION_MANAGER_PR_STATE_OPEN" &&
-		"$pr_state" != "$_VERSION_MANAGER_PR_STATE_CLOSED" ]]; then
-		return 1
-	fi
+	_version_manager_verify_protected_pr_state "$pr_state" "$merged_at" || return 1
 	_version_manager_remote_branch_head "$branch_name" || return 1
 	remote_branch_head="$_VERSION_MANAGER_PROTECTED_RELEASE_HEAD"
 	if [[ -n "$remote_branch_head" && "$remote_branch_head" != "$pr_head" ]]; then
@@ -621,7 +633,7 @@ _version_manager_reconcile_protected_release_tag() {
 		print_error "Protected release PR does not contain the signed release commit"
 		return 1
 	fi
-	if [[ "$pr_state" == "$_VERSION_MANAGER_PR_STATE_CLOSED" && -n "$merged_at" ]]; then
+	if [[ "$pr_state" == "$_VERSION_MANAGER_PR_STATE_CLOSED" ]]; then
 		git -C "$REPO_ROOT" fetch origin main --quiet || return 1
 		if ! git -C "$REPO_ROOT" merge-base --is-ancestor \
 			"$_VERSION_MANAGER_LOCAL_TAG_COMMIT" origin/main; then
@@ -650,5 +662,44 @@ _version_manager_reconcile_protected_release_tag() {
 	_VERSION_MANAGER_PROTECTED_RELEASE_RESULT="pr-pending"
 	printf 'release:queued pr=%s tag=%s head=%s\n' \
 		"$_VERSION_MANAGER_PROTECTED_PR_NUMBER" "$tag_name" "$pr_head"
+	return 0
+}
+
+_version_manager_verify_protected_release_supersession() {
+	local repo="$1"
+	local source_tag="$2"
+	local successor_commit="$3"
+	local source_tag_object=""
+	local source_commit=""
+	local protected_pr=""
+	local protected_head=""
+	local protected_merged_at=""
+
+	_VERSION_MANAGER_PROTECTED_SUPERSESSION_JSON=""
+	[[ "$successor_commit" =~ ^[0-9a-f]{40}$ ]] || return 1
+	_version_manager_reconcile_protected_release_tag "$repo" "$source_tag" status \
+		>/dev/null || return 1
+	[[ "$_VERSION_MANAGER_PROTECTED_RELEASE_RESULT" == "tag-ready" ]] || return 1
+
+	source_tag_object="$_VERSION_MANAGER_LOCAL_TAG_OBJECT"
+	source_commit="$_VERSION_MANAGER_LOCAL_TAG_COMMIT"
+	protected_pr="$_VERSION_MANAGER_PROTECTED_PR_NUMBER"
+	protected_head=$(jq -r '.head.sha // ""' \
+		<<<"$_VERSION_MANAGER_PROTECTED_PR_JSON") || return 1
+	protected_merged_at=$(jq -r '.merged_at // ""' \
+		<<<"$_VERSION_MANAGER_PROTECTED_PR_JSON") || return 1
+	[[ "$source_tag_object" =~ ^[0-9a-f]{40}$ && "$source_commit" =~ ^[0-9a-f]{40}$ ]] || return 1
+	[[ "$protected_pr" =~ ^[0-9]+$ && "$protected_head" =~ ^[0-9a-f]{40}$ ]] || return 1
+	[[ "$protected_merged_at" =~ $_VERSION_MANAGER_TIMESTAMP_REGEX ]] || return 1
+	git -C "$REPO_ROOT" merge-base --is-ancestor "$source_commit" "$successor_commit" || return 1
+	git -C "$REPO_ROOT" merge-base --is-ancestor "$protected_head" "$successor_commit" || return 1
+
+	_VERSION_MANAGER_PROTECTED_SUPERSESSION_JSON=$(jq -cn \
+		--arg source_tag "$source_tag" --arg source_tag_object "$source_tag_object" \
+		--arg source_commit "$source_commit" --argjson protected_pr "$protected_pr" \
+		--arg protected_head "$protected_head" --arg protected_merged_at "$protected_merged_at" \
+		'{source_tag:$source_tag,source_tag_object:$source_tag_object,
+		  source_commit:$source_commit,protected_pr:$protected_pr,
+		  protected_head:$protected_head,protected_merged_at:$protected_merged_at}') || return 1
 	return 0
 }
