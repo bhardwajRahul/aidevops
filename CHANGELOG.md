@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.222] - 2026-08-04
+
+### Added
+
+- define isolated app-team manifests (#29510)
+
 ## [3.32.221] - 2026-08-04
 
 ### Added
