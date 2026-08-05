@@ -29,8 +29,17 @@ assert "upload-artifact" in normal
 projection_checkout = next(step for step in jobs["forge-event"]["steps"] if step.get("name") == "Checkout repository projection")
 assert projection_checkout["with"]["ref"] == "${{ github.event_name == 'push' && github.sha || github.event.repository.default_branch }}"
 assert projection_checkout["with"]["token"] == "${{ secrets.GITHUB_TOKEN }}"
+restore = next(step for step in jobs["forge-event"]["steps"] if step.get("name") == "Restore durable coordinator state")
+assert restore["id"] == "coordinator-restore"
+assert ".restore-deferred" in restore["run"]
 ingest = next(step for step in jobs["forge-event"]["steps"] if step.get("name") == "Ingest event and execute publication queue")
 assert ingest["env"]["GH_TOKEN"] == "${{ secrets.GITHUB_TOKEN }}"
+assert "steps.coordinator-restore.outputs.available == 'true'" in ingest["if"]
+upload = next(step for step in jobs["forge-event"]["steps"] if step.get("name") == "Upload durable coordinator state")
+assert upload["with"]["name"] == "forge-coordinator-${{ github.repository_id }}"
+persist = next(step for step in jobs["forge-event"]["steps"] if step.get("name") == "Persist durable coordinator state")
+assert persist["id"] == "coordinator-persist"
+assert "steps.coordinator-persist.outcome == 'success'" in upload["if"]
 push_checkout = next(step for step in jobs["sync-on-push"]["steps"] if step.get("name") == "Checkout")
 assert push_checkout["with"]["token"] == "${{ secrets.SYNC_PAT || secrets.GITHUB_TOKEN }}"
 push_warning = next(step for step in jobs["sync-on-push"]["steps"] if step.get("name") == "Check SYNC_PAT visibility (t2166)")
@@ -98,14 +107,26 @@ mkdir -p "${test_root}/bin" "${test_root}/state"
 cat >"${test_root}/bin/gh" <<'GH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$GH_CALL_LOG"
-if [[ "$*" == *"actions/artifacts?per_page=100"* ]]; then
+if [[ "$*" == *"actions/artifacts?name=forge-coordinator-R_1&per_page=1"* ]]; then
 	[[ "$*" != *"--jq"* ]] || exit 64
-	if [[ "$*" == *"--paginate --slurp"* ]]; then
-		printf '[{"artifacts":[{"id":11,"name":"forge-coordinator-R_1-old","created_at":"2026-01-01T00:00:00Z","expired":false}]},{"artifacts":[{"id":23,"name":"forge-coordinator-R_1-new-a","created_at":"2026-02-01T00:00:00Z","expired":false},{"id":24,"name":"forge-coordinator-R_1-new-b","created_at":"2026-02-01T00:00:00Z","expired":false},{"id":25,"name":"forge-coordinator-R_1-expired","created_at":"2026-03-01T00:00:00Z","expired":true}]}]\n'
-	else
-		printf '11\n22\n'
+	if [[ "${GH_EMPTY_EXACT:-0}" == "1" ]]; then
+		printf '{"artifacts":[]}\n'
+		exit 0
 	fi
+	printf '{"artifacts":[{"id":24,"name":"forge-coordinator-R_1","created_at":"2026-02-01T00:00:00Z","expired":false}]}\n'
 	exit 0
+fi
+if [[ "$*" == *"actions/artifacts?per_page=100"* ]]; then
+	if [[ "${GH_INCOMPLETE_LEGACY:-0}" == "1" ]]; then
+		printf '{"total_count":101,"artifacts":[{"id":22,"name":"unrelated","created_at":"2026-03-01T00:00:00Z","expired":false}]}\n'
+		exit 0
+	fi
+	printf '{"total_count":3,"artifacts":[{"id":22,"name":"forge-coordinator-R_1-old","created_at":"2026-01-01T00:00:00Z","expired":false},{"id":23,"name":"forge-coordinator-R_1-new","created_at":"2026-02-01T00:00:00Z","expired":false},{"id":25,"name":"forge-coordinator-R_1-expired","created_at":"2026-03-01T00:00:00Z","expired":true}]}\n'
+	exit 0
+fi
+if [[ "${GH_DOWNLOAD_RATE_LIMIT:-0}" == "1" && "$*" == *"/zip"* ]]; then
+	printf 'gh: You have exceeded a secondary rate limit. (HTTP 403)\n' >&2
+	exit 1
 fi
 [[ "$*" != *$'\n'* ]] || exit 1
 printf 'fixture archive'
@@ -119,14 +140,70 @@ chmod +x "${test_root}/bin/gh" "${test_root}/bin/unzip"
 jq_dir=$(dirname "$(command -v jq)")
 GH_CALL_LOG="${test_root}/api.log" PATH="${test_root}/bin:${jq_dir}:/usr/bin:/bin" bash "$STATE_HELPER" restore "${test_root}/state" owner/repo R_1
 [[ "$(cat "${test_root}/state/tasks.db")" == "durable-db" ]]
-grep -q 'repos/owner/repo/actions/artifacts?per_page=100' "${test_root}/api.log"
-grep -q -- '--paginate --slurp' "${test_root}/api.log"
+grep -q 'repos/owner/repo/actions/artifacts?name=forge-coordinator-R_1&per_page=1' "${test_root}/api.log"
+if grep -q -- '--paginate\|--slurp' "${test_root}/api.log"; then
+	printf 'FAIL: coordinator restore must not paginate all repository artifacts\n' >&2
+	exit 1
+fi
 if grep -q -- '--jq' "${test_root}/api.log"; then
 	printf 'FAIL: gh api must not combine --slurp with --jq\n' >&2
 	exit 1
 fi
 grep -q 'repos/owner/repo/actions/artifacts/24/zip' "${test_root}/api.log"
 [[ "$(grep -c '/zip' "${test_root}/api.log")" -eq 1 ]]
+
+# Repositories without a stable-name checkpoint use exactly one legacy page.
+mkdir -p "${test_root}/legacy-state"
+: >"${test_root}/legacy-api.log"
+GH_EMPTY_EXACT=1 GH_CALL_LOG="${test_root}/legacy-api.log" PATH="${test_root}/bin:${jq_dir}:/usr/bin:/bin" \
+	bash "$STATE_HELPER" restore "${test_root}/legacy-state" owner/repo R_1
+[[ "$(<"${test_root}/legacy-state/tasks.db")" == "durable-db" ]]
+grep -q 'repos/owner/repo/actions/artifacts?per_page=100' "${test_root}/legacy-api.log"
+grep -q 'repos/owner/repo/actions/artifacts/23/zip' "${test_root}/legacy-api.log"
+if grep -q -- '--paginate\|--slurp' "${test_root}/legacy-api.log"; then
+	printf 'FAIL: legacy coordinator restore must remain one-page bounded\n' >&2
+	exit 1
+fi
+
+# An incomplete bounded legacy page explicitly bootstraps the stable-name path.
+mkdir -p "${test_root}/incomplete-state"
+GH_EMPTY_EXACT=1 GH_INCOMPLETE_LEGACY=1 GH_CALL_LOG="${test_root}/incomplete-api.log" PATH="${test_root}/bin:${jq_dir}:/usr/bin:/bin" \
+	bash "$STATE_HELPER" restore "${test_root}/incomplete-state" owner/repo R_1 2>"${test_root}/incomplete-error"
+[[ -f "${test_root}/incomplete-state/.restore-empty-init" ]]
+[[ ! -f "${test_root}/incomplete-state/.restore-deferred" ]]
+[[ ! -f "${test_root}/incomplete-state/tasks.db" ]]
+grep -q 'initializing one stable-name checkpoint' "${test_root}/incomplete-error"
+
+# Installation rate exhaustion defers publication without replacing the checkpoint.
+mkdir -p "${test_root}/rate-limit-bin" "${test_root}/rate-limited-state"
+cat >"${test_root}/rate-limit-bin/gh" <<'GH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$GH_CALL_LOG"
+printf 'gh: API rate limit exceeded for installation. (HTTP 403)\n' >&2
+exit 1
+GH
+chmod +x "${test_root}/rate-limit-bin/gh"
+printf 'durable-db\n' >"${test_root}/rate-limited-state/tasks.db"
+: >"${test_root}/rate-limit.log"
+GH_CALL_LOG="${test_root}/rate-limit.log" PATH="${test_root}/rate-limit-bin:${jq_dir}:/usr/bin:/bin" \
+	bash "$STATE_HELPER" restore "${test_root}/rate-limited-state" owner/repo R_1 2>"${test_root}/rate-limit-error"
+[[ "$(<"${test_root}/rate-limited-state/tasks.db")" == "durable-db" ]]
+[[ -f "${test_root}/rate-limited-state/.restore-deferred" ]]
+grep -q 'Coordinator restore deferred' "${test_root}/rate-limit-error"
+[[ "$(grep -c 'actions/artifacts' "${test_root}/rate-limit.log")" -eq 1 ]]
+if grep -q '/zip' "${test_root}/rate-limit.log"; then
+	printf 'FAIL rate-limited artifact listing attempted a download\n' >&2
+	exit 1
+fi
+
+# Secondary limits from the artifact download endpoint also preserve state.
+mkdir -p "${test_root}/download-limited-state"
+printf 'durable-db\n' >"${test_root}/download-limited-state/tasks.db"
+GH_DOWNLOAD_RATE_LIMIT=1 GH_CALL_LOG="${test_root}/download-rate-limit.log" PATH="${test_root}/bin:${jq_dir}:/usr/bin:/bin" \
+	bash "$STATE_HELPER" restore "${test_root}/download-limited-state" owner/repo R_1 2>"${test_root}/download-rate-limit-error"
+[[ -f "${test_root}/download-limited-state/.restore-deferred" ]]
+[[ "$(<"${test_root}/download-limited-state/tasks.db")" == "durable-db" ]]
+grep -q 'secondary rate limit' "${test_root}/download-rate-limit-error"
 
 # A malformed multi-line selector result must fail before URL construction.
 mkdir -p "${test_root}/malformed-bin"
