@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.228] - 2026-08-06
+
+### Added
+
+- add sudo-signed temporary source-read approvals
+
+### Fixed
+
+- bootstrap post-merge verification dependencies (#29612)
+- avoid quoted session risk false positives
+
 ## [3.32.227] - 2026-08-05
 
 ### Added
