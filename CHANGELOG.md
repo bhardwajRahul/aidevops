@@ -10,9 +10,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.227] - 2026-08-05
+
+### Added
+
+- Generate the canonical aidevops agent roster from discovery metadata
+
+### Changed
+
+- Documentation: prepare sudo auth release checkpoint
+- Documentation: review community ASC skills 3.5.0 (#29598)
+- Documentation: review asc-cli test isolation update (#29597)
+- Maintenance: Record merged completion proof
+
 ### Fixed
 
-- tolerate transient `gh auth status` failures during sudo approval recovery (#29608)
+- harden sudo approval auth recovery
+- defer rate-limited GitHub releases
+- stabilize Qlty similar-code scans (#29602)
+- preserve post-merge verification results (#29601)
+- accept deterministic equivalent official remotes
+- accept successful stale release runs (#29583)
+- Accept validated same-tree release preservation merge
+- resolve deployed reusable workflow templates (#29579)
+- add exact ID lookup to memory recall (#29578)
+- clear stale terminal permission blockers (#29576)
+- preserve audit snapshots across transport failures (#29571)
+- exhaust audit REST capture fallback (#29569)
+- isolate GH edit safety audit records (#29568)
 
 ## [3.32.226] - 2026-08-05
 
