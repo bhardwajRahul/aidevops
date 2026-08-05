@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.224] - 2026-08-05
+
+### Changed
+
+- Documentation: Aggregate PR #29538 release provenance
+
+### Fixed
+
+- preserve squash change categories (#29536)
+- route interactive worker draft checkpoints (#29540)
+- reconcile dependency holds and feedback claims (#29533)
+
 ## [3.32.223] - 2026-08-05
 
 ### Added
