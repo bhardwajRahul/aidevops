@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.225] - 2026-08-05
+
+### Changed
+
+- Documentation: Aggregate PR #29547 release provenance
+- Documentation: Correct Buzz release aggregation trailers
+- Documentation: Publish the provider-neutral team-interface mission plan
+
 ## [3.32.224] - 2026-08-05
 
 ### Changed
