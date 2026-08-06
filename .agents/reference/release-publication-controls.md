@@ -277,17 +277,15 @@ It intentionally carries no aggregation trailers because terminal release
 receipts are irreversible publication boundaries. The exact branch base is
 `7ab73e1de613615587e43f77188d127d699d480b`.
 
-Aggregation PR #29626 reviews authorized temporary source-read approval
-PR #29620 at `72cca1de82cf9fd8a9e7b775f3b8dfdca8d74eca`.
-Unpublished protected `v3.32.228`, merged remediation PR #29623, and subsequent
-maintained merges advanced `main`. The exact branch base is
-`6a894fa5f7a5e8ee9c919b28ce4392afb0a7f29d`.
-
-Aggregation PR #29629 re-reviews PR #29620 at
-`72cca1de82cf9fd8a9e7b775f3b8dfdca8d74eca` and aggregation PR #29626 at
-`8fbcfb54a6e9e4897b44f3b79cc958065e8c385f`. GitHub auto-merge omitted the
-reviewed trailer block from the earlier merge commit. The exact branch base is
-`8fbcfb54a6e9e4897b44f3b79cc958065e8c385f`.
+- Aggregation PR #29626 reviews authorized PR #29620 at
+  `72cca1de82cf9fd8a9e7b775f3b8dfdca8d74eca`; its exact base is
+  `6a894fa5f7a5e8ee9c919b28ce4392afb0a7f29d` after `v3.32.228` and later merges.
+- Aggregation PR #29629 re-reviews PR #29620 and PR #29626 at
+  `8fbcfb54a6e9e4897b44f3b79cc958065e8c385f`, whose auto-merge message omitted
+  the reviewed trailers; that commit is also the exact branch base.
+- The pending final correction re-reviews PRs #29620, #29626, and #29629 at
+  exact base `4365863f8b7e0cabe30a62c39b92fba92e667408`, whose signature footer followed
+  the reviewed trailers and prevented parsing.
 
 Manual arbitrary-version package publication is intentionally unsupported. A
 recovery operation must use an existing tag that passes the same verifier.
