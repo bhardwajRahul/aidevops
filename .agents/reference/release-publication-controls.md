@@ -283,7 +283,7 @@ receipts are irreversible publication boundaries. The exact branch base is
 - Aggregation PR #29629 re-reviews PR #29620 and PR #29626 at
   `8fbcfb54a6e9e4897b44f3b79cc958065e8c385f`, whose auto-merge message omitted
   the reviewed trailers; that commit is also the exact branch base.
-- The pending final correction re-reviews PRs #29620, #29626, and #29629 at
+- Aggregation PR #29632 re-reviews PRs #29620, #29626, and #29629 at
   exact base `4365863f8b7e0cabe30a62c39b92fba92e667408`, whose signature footer followed
   the reviewed trailers and prevented parsing.
 
