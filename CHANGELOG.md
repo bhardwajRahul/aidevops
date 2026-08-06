@@ -10,6 +10,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.229] - 2026-08-06
+
+### Added
+
+- add read-only team-interface runtime
+
+### Changed
+
+- Documentation: finalize source-access release aggregation provenance
+- Documentation: bind final source-access release aggregation
+- Documentation: record final source-access release aggregation
+- Documentation: correct source-access release aggregation provenance
+- Documentation: bind corrective source-access release aggregation
+- Documentation: record corrective source-access release aggregation
+- Documentation: bind source-access successor release aggregation
+- Documentation: record source-access successor release aggregation
+- Refactor: reduce source-access Qlty debt
+
+### Fixed
+
+- prevent stale Qlty remediation issues (#29633)
+
 ## [3.32.228] - 2026-08-06
 
 ### Added
