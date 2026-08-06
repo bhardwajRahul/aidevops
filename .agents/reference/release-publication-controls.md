@@ -283,10 +283,10 @@ Unpublished protected `v3.32.228`, merged remediation PR #29623, and subsequent
 maintained merges advanced `main`. The exact branch base is
 `6a894fa5f7a5e8ee9c919b28ce4392afb0a7f29d`.
 
-The pending corrective source-access aggregation re-reviews PR #29620 at
+Aggregation PR #29629 re-reviews PR #29620 at
 `72cca1de82cf9fd8a9e7b775f3b8dfdca8d74eca` and aggregation PR #29626 at
 `8fbcfb54a6e9e4897b44f3b79cc958065e8c385f`. GitHub auto-merge omitted the
-reviewed trailer block from that merge commit. The exact branch base is
+reviewed trailer block from the earlier merge commit. The exact branch base is
 `8fbcfb54a6e9e4897b44f3b79cc958065e8c385f`.
 
 Manual arbitrary-version package publication is intentionally unsupported. A
