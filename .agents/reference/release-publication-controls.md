@@ -277,8 +277,8 @@ It intentionally carries no aggregation trailers because terminal release
 receipts are irreversible publication boundaries. The exact branch base is
 `7ab73e1de613615587e43f77188d127d699d480b`.
 
-The pending source-access successor aggregation reviews authorized temporary
-source-read approval PR #29620 at `72cca1de82cf9fd8a9e7b775f3b8dfdca8d74eca`.
+Aggregation PR #29626 reviews authorized temporary source-read approval
+PR #29620 at `72cca1de82cf9fd8a9e7b775f3b8dfdca8d74eca`.
 Unpublished protected `v3.32.228`, merged remediation PR #29623, and subsequent
 maintained merges advanced `main`. The exact branch base is
 `6a894fa5f7a5e8ee9c919b28ce4392afb0a7f29d`.
