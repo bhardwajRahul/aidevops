@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.231] - 2026-08-07
+
+### Added
+
+- Add read-only Matrix team-interface adapter
+
+### Fixed
+
+- canonicalize source-access public keys
+
 ## [3.32.230] - 2026-08-07
 
 ### Added
