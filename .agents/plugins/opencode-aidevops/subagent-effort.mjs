@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2025-2026 Marcus Quinn
 
 import { existsSync, readFileSync } from "fs";
+import { withUnambiguousProviderFallbacks } from "./model-routing-reasoning.mjs";
 import { createSubagentEffortHandlers } from "./subagent-effort-handlers.mjs";
 
 const VARIANT_RANK = {
@@ -58,7 +59,7 @@ export function loadTierReasoningPolicies(paths) {
       const routing = JSON.parse(readFileSync(path, "utf8"));
       const policies = {};
       for (const tier of ["simple", "standard", "thinking"]) {
-        policies[tier] = routing?.tiers?.[tier]?.reasoning || {};
+        policies[tier] = withUnambiguousProviderFallbacks(routing?.tiers?.[tier]?.reasoning || {});
       }
       return policies;
     } catch {

@@ -21,6 +21,7 @@ import {
 } from "./config-agent-profiles.mjs";
 import {
   enforcePublicTriageIsolation,
+  enforceTeamInterfaceConversationIsolation,
   ensureAgentGuard,
   registerManagedDirectoryPermissions,
 } from "./config-safety-guards.mjs";
@@ -33,7 +34,12 @@ import {
 } from "./model-limits.mjs";
 
 export { registerApprovedWorkerPermissions };
-export { registerResearchOnlyAgent, enforcePublicTriageIsolation, registerManagedDirectoryPermissions };
+export {
+  enforcePublicTriageIsolation,
+  enforceTeamInterfaceConversationIsolation,
+  registerManagedDirectoryPermissions,
+  registerResearchOnlyAgent,
+};
 
 /**
  * Shared model definition template for Claude models managed by aidevops.
@@ -267,6 +273,7 @@ function logConfigSummary(counts) {
     [counts.cursor, "Cursor models"],
     [counts.google, "Google models"],
     [counts.claude, "Claude CLI models"],
+    [counts.conversationIsolation, "restricted conversation profile"],
   ];
   const parts = labels
     .filter(([n]) => n > 0)
@@ -298,6 +305,7 @@ export function createConfigHook(deps) {
     workspaceDir,
     pluginDir,
     repositoryDir,
+    conversation,
     modelRouting,
     agentRoutingState = { tiers: new Map(), pinned: new Set() },
   } = deps;
@@ -308,6 +316,24 @@ export function createConfigHook(deps) {
    * @param {object} config - OpenCode Config object (mutable)
    */
   return async function configHook(config) {
+    if (conversation) {
+      const conversationIsolation = enforceTeamInterfaceConversationIsolation(config, conversation);
+      logConfigSummary({
+        agents: 0,
+        mcps: 0,
+        agentTools: 0,
+        directories: 0,
+        permissionGrants: 0,
+        poolCleaned: 0,
+        anthropic: 0,
+        openai: 0,
+        cursor: 0,
+        google: 0,
+        claude: 0,
+        conversationIsolation,
+      });
+      return;
+    }
     if (!config.agent) config.agent = {};
     agentRoutingState.tiers.clear();
     agentRoutingState.pinned.clear();
@@ -363,9 +389,23 @@ export function createConfigHook(deps) {
 
     const claude = registerClaudeCliModels(config);
     enforcePublicTriageIsolation(config);
+    const conversationIsolation = enforceTeamInterfaceConversationIsolation(config, conversation);
 
     logConfigSummary(
-      { agents, mcps, agentTools, directories, permissionGrants, poolCleaned, anthropic, openai, cursor, google, claude },
+      {
+        agents,
+        mcps,
+        agentTools,
+        directories,
+        permissionGrants,
+        poolCleaned,
+        anthropic,
+        openai,
+        cursor,
+        google,
+        claude,
+        conversationIsolation,
+      },
     );
     logVersionDriftAsync(pluginDir);
   };
