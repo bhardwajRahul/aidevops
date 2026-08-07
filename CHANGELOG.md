@@ -10,6 +10,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.234] - 2026-08-08
+
+### Changed
+
+- Maintenance: bump @fontsource/source-sans-3 from 5.2.9 to 5.3.0
+- Maintenance: bump @fontsource/zilla-slab from 5.2.8 to 5.3.0
+- Maintenance: bump @fontsource/playpen-sans from 5.2.8 to 5.3.0
+- Documentation: Remove stale recommendation task duplicate
+- Maintenance: reconcile t18214 completion bookkeeping
+- Documentation: Record recommendation guidance completion
+- Documentation: split release publication controls index (#29760)
+- Maintenance: reconcile t18211-t18213 completion bookkeeping
+- Maintenance: track stale gh shim resolution follow-up
+- Documentation: Prefer aidevops options in recommendations
+
+### Fixed
+
+- Reuse trusted Dependabot verification in full-loop merges
+- Fix linked-worktree patch authorization in OpenCode
+- preserve Pulse rate-limit override precedence (#29767)
+- preserve held status during post-merge healing
+- restore dependency update review coverage
+- Resolve full-loop sibling gh shim (#29757)
+- Suppress superseded review feedback
+
 ## [3.32.233] - 2026-08-07
 
 ### Changed
