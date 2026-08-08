@@ -10,6 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.239] - 2026-08-08
+
+### Added
+
+- show delegated child counts in routing feedback (#29816)
+- add compact worktree archives (#29807)
+
+### Changed
+
+- Documentation: route output-heavy subagent work (#29814)
+- Documentation: refresh Cloudron official skills (#29811)
+
+### Fixed
+
+- expose existing Bun installs to workers (#29812)
+- recover stale ownerless receipt locks (#29806)
+- bound unknown REST progress (#29801)
+
 ## [3.32.238] - 2026-08-08
 
 ### Fixed
