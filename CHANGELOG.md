@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.236] - 2026-08-08
+
+### Changed
+
+- Maintenance: bump vite from 7.3.5 to 8.1.5
+- Tests: Fix Actions saturation evidence fixtures
+
+### Fixed
+
+- Persist authoritative repository roles
+
 ## [3.32.235] - 2026-08-08
 
 ### Changed
