@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.238] - 2026-08-08
+
+### Fixed
+
+- auto-dispatch trusted quality audit findings
+- serialize repository release lanes (#29797)
+
 ## [3.32.237] - 2026-08-08
 
 ### Fixed
