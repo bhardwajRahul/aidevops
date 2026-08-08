@@ -994,6 +994,76 @@ ensure_solved_labels_exist() {
 }
 
 #######################################
+# Resolve completion attribution from a merged PR's origin labels.
+# Unknown or contradictory provenance is deliberately not guessed.
+# Args: $1 — comma-separated PR label names
+# Stdout: worker|interactive
+# Returns: 0 on unambiguous attribution, 1 otherwise.
+#######################################
+solved_actor_from_pr_labels() {
+	local labels_csv="$1"
+	local has_worker=0 has_takeover=0 has_interactive=0
+	case ",${labels_csv}," in
+	*,origin:worker,*) has_worker=1 ;;
+	esac
+	case ",${labels_csv}," in
+	*,origin:worker-takeover,*) has_takeover=1 ;;
+	esac
+	case ",${labels_csv}," in
+	*,origin:interactive,*) has_interactive=1 ;;
+	esac
+
+	# Takeover is explicit evidence that a worker ultimately solved work that may
+	# retain interactive provenance for audit history. Other dual-origin states
+	# are contradictory and remain unattributed.
+	if [[ "$has_takeover" -eq 1 ]]; then
+		printf 'worker\n'
+		return 0
+	fi
+	if [[ "$has_worker" -eq 1 && "$has_interactive" -eq 1 ]]; then
+		return 1
+	fi
+	if [[ "$has_worker" -eq 1 ]]; then
+		printf 'worker\n'
+		return 0
+	fi
+	if [[ "$has_interactive" -eq 1 ]]; then
+		printf 'interactive\n'
+		return 0
+	fi
+	return 1
+}
+
+#######################################
+# Attribute an issue from an explicitly identified merged PR.
+# The live mergedAt read prevents unmerged/closed PRs from being counted as
+# solved work. PR origin is authoritative; issue origin is never consulted.
+# Args: $1=issue number, $2=repo slug, $3=PR number
+# Returns: 0 on attribution, 1 on missing/ambiguous evidence, 2 on bad args.
+#######################################
+set_solved_label_from_merged_pr() {
+	local issue_num="$1"
+	local repo_slug="$2"
+	local pr_num="$3"
+	if [[ ! "$issue_num" =~ ^[0-9]+$ || -z "$repo_slug" || ! "$pr_num" =~ ^[0-9]+$ ]]; then
+		return 2
+	fi
+
+	local pr_evidence=""
+	pr_evidence=$(gh pr view "$pr_num" --repo "$repo_slug" \
+		--json mergedAt,labels \
+		--jq '[.mergedAt // "", ([.labels[].name] | join(","))] | @tsv' 2>/dev/null) || return 1
+	local merged_at="${pr_evidence%%$'\t'*}"
+	local pr_labels="${pr_evidence#*$'\t'}"
+	[[ -n "$merged_at" && "$pr_evidence" == *$'\t'* ]] || return 1
+
+	local solved_actor=""
+	solved_actor=$(solved_actor_from_pr_labels "$pr_labels") || return 1
+	set_solved_label "$issue_num" "$repo_slug" "$solved_actor"
+	return $?
+}
+
+#######################################
 # Transition an issue to a solved:* attribution label atomically.
 #
 # This is separate from origin:*: origin says who created the issue/PR;
