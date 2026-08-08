@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.237] - 2026-08-08
+
+### Fixed
+
+- coalesce redundant dispatch lease renewal comments
+- refresh existing routine schedule metadata (#29789)
+
 ## [3.32.236] - 2026-08-08
 
 ### Changed
