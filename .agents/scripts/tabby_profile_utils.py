@@ -8,8 +8,12 @@ from __future__ import annotations
 import re
 
 
-TABBY_OPENCODE_LAUNCH = "aidevops opencode; exec zsh"
+TABBY_OPENCODE_LAUNCH = "exec aidevops opencode --tabby-shell"
 TABBY_COMMAND_FIELD_OPENCODE = f"/bin/zsh -l -c '{TABBY_OPENCODE_LAUNCH}'"
+PRE_RECOVERY_TABBY_OPENCODE_LAUNCH = "aidevops opencode; exec zsh"
+PRE_RECOVERY_TABBY_COMMAND_FIELD_OPENCODE = (
+    f"/bin/zsh -l -c '{PRE_RECOVERY_TABBY_OPENCODE_LAUNCH}'"
+)
 LEGACY_TABBY_OPENCODE_LAUNCH = "opencode; exec zsh"
 LEGACY_TABBY_COMMAND_FIELD_OPENCODE = "/bin/zsh -l -c 'opencode; exec zsh'"
 
@@ -73,17 +77,20 @@ def _is_command_field_opencode(value: str) -> bool:
     """Return True for the Tabby command-field shape that Tabby cannot exec."""
     value = value.strip()
     normalised = _normalise_yaml_scalar(value)
-    return (
-        value == TABBY_COMMAND_FIELD_OPENCODE
-        or value == LEGACY_TABBY_COMMAND_FIELD_OPENCODE
-        or normalised == TABBY_COMMAND_FIELD_OPENCODE
-        or normalised == LEGACY_TABBY_COMMAND_FIELD_OPENCODE
+    opencode_commands = (
+        TABBY_COMMAND_FIELD_OPENCODE,
+        PRE_RECOVERY_TABBY_COMMAND_FIELD_OPENCODE,
+        LEGACY_TABBY_COMMAND_FIELD_OPENCODE,
     )
+    return value in opencode_commands or normalised in opencode_commands
 
 
 def _is_legacy_direct_opencode_args(args: list[str]) -> bool:
     """Return True for direct OpenCode args that still use the shared DB."""
-    return args == ["-l", "-c", LEGACY_TABBY_OPENCODE_LAUNCH]
+    return args in (
+        ["-l", "-c", PRE_RECOVERY_TABBY_OPENCODE_LAUNCH],
+        ["-l", "-c", LEGACY_TABBY_OPENCODE_LAUNCH],
+    )
 
 
 def _direct_opencode_args_block(args_indent: str, include_env: bool) -> list[str]:
