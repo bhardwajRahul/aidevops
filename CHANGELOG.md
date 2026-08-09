@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.243] - 2026-08-09
+
+### Fixed
+
+- enforce stats wrapper timeout (#29837)
+
 ## [3.32.242] - 2026-08-09
 
 ### Changed
