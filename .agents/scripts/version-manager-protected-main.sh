@@ -223,6 +223,25 @@ _version_manager_verify_protected_pr_head() {
 	return 0
 }
 
+_version_manager_clear_stale_closed_protected_pr() {
+	local expected_head="$1"
+	local actual_head=""
+	local pr_state=""
+
+	[[ -n "$_VERSION_MANAGER_PROTECTED_PR_JSON" ]] || return 0
+	actual_head=$(jq -r '.head.sha // ""' <<<"$_VERSION_MANAGER_PROTECTED_PR_JSON") || return 1
+	pr_state=$(jq -r '.state // ""' <<<"$_VERSION_MANAGER_PROTECTED_PR_JSON") || return 1
+	if [[ "$actual_head" == "$expected_head" || "$pr_state" != "$_VERSION_MANAGER_PR_STATE_CLOSED" ]]; then
+		return 0
+	fi
+	# A prior closed PR for this deterministic branch cannot authorize its
+	# advanced head. Clear only that stale result so a new exact-head PR can be
+	# created; open mismatches continue to fail closed below.
+	_VERSION_MANAGER_PROTECTED_PR_JSON=""
+	_VERSION_MANAGER_PROTECTED_PR_NUMBER=""
+	return 0
+}
+
 _version_manager_verify_protected_pr_identity() {
 	local repo="$1"
 	local branch_name="$2"
@@ -441,6 +460,7 @@ _version_manager_create_or_reuse_protected_pr() {
 	local -a create_args=()
 
 	_version_manager_find_protected_release_pr "$repo" "$branch_name" || return 1
+	_version_manager_clear_stale_closed_protected_pr "$recovery_head" || return 1
 	if [[ -z "$_VERSION_MANAGER_PROTECTED_PR_NUMBER" ]]; then
 		body_file=$(mktemp) || return 1
 		_version_manager_write_protected_pr_body "$body_file" "$repo" "$version" \
