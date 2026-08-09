@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.240] - 2026-08-09
+
+### Added
+
+- add compact token report data (#29825)
+
+### Fixed
+
+- report observability token costs (#29823)
+- deploy releases over validated ancestors
+
 ## [3.32.239] - 2026-08-08
 
 ### Added
