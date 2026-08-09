@@ -6,41 +6,20 @@ import {
   routingCandidates,
   routingModelIdentity,
   routingTierForModel,
+  nextRoutingTier,
   selectConnectedRoutingCandidate,
 } from "./model-routing.mjs";
 
-async function routeChatMessage(context, output) {
-  const message = output?.message || {};
-  const sessionID = message.sessionID;
-  if (!sessionID) return;
-
-  const now = Date.now();
-  context.prunePolicies(context.policies, now);
-  const text = context.messageText(output.parts);
-  const agentName = String(message.agent ?? message.mode ?? "");
-  const route = context.routedPolicy(context.agentRoutingState, agentName, text);
-  const policy = {
-    effort: route.effort,
-    reason: route.pinned ? "explicit_model" : route.reason,
-    attempt: 0,
-    createdAt: now,
-  };
-  context.policies.set(sessionID, policy);
-
-  if (!context.modelRouting || route.pinned) return;
-  const candidates = routingCandidates(context.modelRouting, route.effort);
-  if (candidates.length === 0) {
-    throw new Error(`[aidevops] Model routing tier '${route.effort}' is disabled`);
-  }
-
-  let childSession;
+async function loadChildSessionWithParent(context, sessionID) {
   try {
-    childSession = await context.getSession(context.client, sessionID);
+    const childSession = await context.getSession(context.client, sessionID);
+    return childSession?.parentID ? childSession : null;
   } catch {
-    return;
+    return null;
   }
-  if (!childSession.parentID) return;
+}
 
+async function applyConnectedRoutingModel(context, route, message, policy) {
   const providerState = await context.resolveProviderState();
   if (!providerState) {
     policy.reason = "provider_state_unavailable_inherit";
@@ -57,7 +36,52 @@ async function routeChatMessage(context, output) {
   message.model = routingModelIdentity(routedModel);
   policy.routedModel = routedModel;
   policy.candidateIndex = routingCandidateIndex(context.modelRouting, route.effort, routedModel);
+}
+
+async function routeChatMessage(context, output) {
+  const message = output?.message || {};
+  const sessionID = message.sessionID;
+  if (!sessionID) return;
+
+  const now = Date.now();
+  context.prunePolicies(context.policies, now);
+  const existingPolicy = context.policies.get(sessionID);
+  if (existingPolicy?.awaitingEscalationPrompt) {
+    existingPolicy.awaitingEscalationPrompt = false;
+    existingPolicy.createdAt = now;
+    if (existingPolicy.routedModel) {
+      message.model = routingModelIdentity(existingPolicy.routedModel);
+    }
+    return;
+  }
+
+  const text = context.messageText(output.parts);
+  const agentName = String(message.agent ?? message.mode ?? "");
+  const route = context.routedPolicy(context.agentRoutingState, agentName, text);
+  const policy = {
+    effort: route.effort,
+    reason: route.pinned ? "explicit_model" : route.reason,
+    attempt: 1,
+    escalated: false,
+    pinned: route.pinned,
+    createdAt: now,
+  };
+  context.policies.set(sessionID, policy);
+
+  if (!context.modelRouting || route.pinned) return;
+  const candidates = routingCandidates(context.modelRouting, route.effort);
+  if (candidates.length === 0) {
+    throw new Error(`[aidevops] Model routing tier '${route.effort}' is disabled`);
+  }
+
+  const childSession = await loadChildSessionWithParent(context, sessionID);
+  if (!childSession) return;
   policy.parentSessionID = childSession.parentID;
+  if (nextRoutingTier(context.modelRouting, route.effort)) {
+    context.appendCapabilityEscalationContract(output);
+  }
+
+  await applyConnectedRoutingModel(context, route, message, policy);
 }
 
 function childModelFrom(context, input) {
@@ -123,7 +147,6 @@ async function recordChildRouting(context, {
   policy,
 }) {
   if (typeof context.onRoutingDecision !== "function") return;
-  if (policy) policy.attempt += 1;
   await context.onRoutingDecision(sessionID, {
     parentSessionID: policy?.parentSessionID || childSession.parentID,
     tier: desiredEffort,
@@ -133,6 +156,7 @@ async function recordChildRouting(context, {
       ?? routingCandidateIndex(context.modelRouting, desiredEffort, childModel),
     attempt: policy?.attempt || 1,
     reason: policy?.reason || "agent_default",
+    escalated: Boolean(policy?.escalated),
   });
 }
 

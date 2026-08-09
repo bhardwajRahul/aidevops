@@ -173,6 +173,17 @@ function readIfExists(filepath) {
   return "";
 }
 
+function currentAidevopsVersion() {
+  const values = [
+    readIfExists(join(ACTIVE_AGENTS_DIR, "VERSION")),
+    readIfExists(join(AGENTS_DIR, "VERSION")),
+    readIfExists(join(AGENTS_DIR, "..", "VERSION")),
+    process.env.AIDEVOPS_VERSION,
+  ];
+  const value = values.find(Boolean) || "";
+  return value.split(/\r?\n/, 1)[0].trim();
+}
+
 // ---------------------------------------------------------------------------
 // Plugin diagnostics are persisted without writing over OpenCode's TUI.
 // AIDEVOPS_PLUGIN_DEBUG=1 additionally mirrors them to stderr.
@@ -278,7 +289,7 @@ export async function AidevopsPlugin({ directory, client }) {
   }
 
   // Initialise LLM observability
-  initObservability();
+  initObservability({ aidevopsVersion: currentAidevopsVersion() });
 
   // Cursor gRPC proxy — prepare models/provider in the background so OpenCode
   // startup never waits on network-bound model discovery or OAuth refresh.
@@ -349,6 +360,8 @@ export async function AidevopsPlugin({ directory, client }) {
     modelRouting,
     agentRoutingState,
     onRoutingDecision: recordRoutingDecision,
+    isHeadless,
+    qualityLog,
   });
   const shouldInjectGreeting = createSessionStartGreetingGate(client, isHeadless);
   const permissionBroker = createPermissionBroker({ client, isHeadless });
@@ -487,10 +500,12 @@ export async function AidevopsPlugin({ directory, client }) {
     "tool.execute.before": async (input, output) => {
       permissionBroker.recordToolCall(input, output);
       cancellationReceipt.beforeTool(input, output);
+      subagentEffortHooks.beforeTool(input, output);
       return toolExecuteBefore(input, output);
     },
     "tool.execute.after": async (input, output) => {
       await cancellationReceipt.afterTool(input, output);
+      await subagentEffortHooks.afterTool(input, output);
       return toolExecuteAfter(input, output);
     },
 
@@ -508,6 +523,7 @@ export async function AidevopsPlugin({ directory, client }) {
       // Fire both in parallel — neither depends on the other's result.
       await Promise.all([
         handleEvent(input),
+        Promise.resolve(subagentEffortHooks.handleEvent(input)),
         compactionContinuation.handleEvent(input),
         Promise.resolve(cancellationReceipt.handleEvent(input)),
         permissionBroker.handleEvent(input).catch((err) => debugEventError("permission broker", err)),
