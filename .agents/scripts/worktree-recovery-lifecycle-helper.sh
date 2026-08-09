@@ -18,6 +18,8 @@ WORKTREE_RECOVERY_PLAN_STATE_CLEAR="clear"
 WORKTREE_RECOVERY_PLAN_CONFIDENCE_EXACT="exact"
 WORKTREE_RECOVERY_PLAN_JSON_NULL="null"
 WORKTREE_RECOVERY_PRODUCER="worktree-helper"
+WORKTREE_RECOVERY_AUTOMATION_POLICY_SCHEMA="aidevops.worktree-recovery-automation-policy/v1"
+WORKTREE_RECOVERY_AUTOMATION_POLICY_ID="bounded-terminal-evidence-v1"
 
 WORKTREE_RECOVERY_LIFECYCLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || return 1
 if [[ -f "$WORKTREE_RECOVERY_LIFECYCLE_DIR/shared-constants.sh" ]]; then
@@ -146,7 +148,7 @@ _worktree_recovery_encode_report() {
 		--argjson total_bytes "$total_bytes" \
 		--argjson protected_bytes "$protected_bytes" \
 		--argjson unknown_bytes "$unknown_bytes" \
-		'{schema:$schema,store_id:"worktree-recovery",producer:$producer,path:$path,owner:$owner,safety_class:"recovery",policy:"manual-review; v1/v2 compatibility; no deletion authority",total_bytes:$total_bytes,protected_bytes:$protected_bytes,reclaimable_bytes:0,unknown_bytes:$unknown_bytes,protection_reasons:["complete attributable archives remain protected; incomplete, malformed, symlinked, or unrecognised archives remain unknown"],sizing_confidence:$confidence,next_action:"Use worktree-helper.sh recovery for bucket details; no cleanup is available in this phase",error:(if $error == "" then null else $error end),root_count:$root_count,bucket_count:$bucket_count,protected_count:$protected_count,reclaimable_count:0,unknown_count:$unknown_count,archive_formats:["aidevops-worktree-recovery-v1","aidevops-worktree-recovery-v2"],buckets:.}' \
+		'{schema:$schema,store_id:"worktree-recovery",producer:$producer,path:$path,owner:$owner,safety_class:"recovery",policy:"aggregate inventory grants no deletion authority; exact manual and automatic plans are separate",total_bytes:$total_bytes,protected_bytes:$protected_bytes,reclaimable_bytes:0,unknown_bytes:$unknown_bytes,protection_reasons:["aggregate reporting conservatively protects attributable archives; incomplete, malformed, symlinked, or unrecognised archives remain unknown"],sizing_confidence:$confidence,next_action:"Use worktree-helper.sh recovery for bucket details; bounded maintenance independently revalidates exact terminal candidates",error:(if $error == "" then null else $error end),root_count:$root_count,bucket_count:$bucket_count,protected_count:$protected_count,reclaimable_count:0,unknown_count:$unknown_count,archive_formats:["aidevops-worktree-recovery-v1","aidevops-worktree-recovery-v2"],buckets:.}' \
 		"$entries_file"
 	return $?
 }
@@ -345,6 +347,38 @@ _worktree_recovery_plan_confirmation_token() {
 		"action=permanently-delete-exact-candidates") || return 1
 	confirmation_digest=$(_worktree_recovery_plan_sha256_text "$confirmation_material") || return 1
 	printf 'apply-sha256:%s\n' "$confirmation_digest"
+	return 0
+}
+
+_worktree_recovery_plan_automatic_token() {
+	local plan_id="$1"
+	local policy_json="$2"
+	local candidate_count="$3"
+	local candidate_bytes="$4"
+	local policy_digest=""
+	local authorization_material=""
+	local authorization_digest=""
+
+	[[ "$plan_id" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
+	case "$candidate_count:$candidate_bytes" in
+	*[!0-9:]*) return 1 ;;
+	esac
+	printf '%s\n' "$policy_json" | jq -e --arg schema "$WORKTREE_RECOVERY_AUTOMATION_POLICY_SCHEMA" \
+		--arg policy_id "$WORKTREE_RECOVERY_AUTOMATION_POLICY_ID" \
+		'type == "object" and .schema == $schema and .policy_id == $policy_id' \
+		>/dev/null 2>&1 || return 1
+	policy_json=$(printf '%s\n' "$policy_json" | jq -cS '.') || return 1
+	policy_digest=$(_worktree_recovery_plan_sha256_text "$policy_json") || return 1
+	authorization_material=$(printf '%s\n' \
+		"schema=$WORKTREE_RECOVERY_PLAN_SCHEMA" \
+		"plan-id=$plan_id" \
+		"policy-id=$WORKTREE_RECOVERY_AUTOMATION_POLICY_ID" \
+		"policy-digest=sha256:$policy_digest" \
+		"candidate-count=$candidate_count" \
+		"candidate-bytes=$candidate_bytes" \
+		"action=automatically-delete-exact-terminal-candidates") || return 1
+	authorization_digest=$(_worktree_recovery_plan_sha256_text "$authorization_material") || return 1
+	printf 'automatic-sha256:%s\n' "$authorization_digest"
 	return 0
 }
 
