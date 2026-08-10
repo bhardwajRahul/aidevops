@@ -74,6 +74,20 @@ cat >"${BIN}/gh" <<'STUB'
 set -u
 printf '%s\n' "$*" >>"${FAKE_GH_LOG:?}"
 if [[ "${1:-}" == "api" && " $* " == *" repos/test/repo/pulls "* ]]; then
+	if [[ -f "${STALE_PR_FILE:?}" && ! -f "${PR_RECREATED_FILE:?}" ]]; then
+		jq -nc --arg stale_head "${STALE_PR_HEAD:?}" '[{
+			number: 76,
+			state: "closed",
+			merged_at: "2026-08-02T00:00:00Z",
+			draft: false,
+			auto_merge: null,
+			author_association: "OWNER",
+			body: "<!-- stale protected release provenance -->",
+			head: {ref: "chore/release-v1.2.3-provenance", sha: $stale_head, repo: {full_name: "test/repo"}},
+			base: {ref: "main", repo: {full_name: "test/repo"}}
+		}]'
+		exit 0
+	fi
 	if [[ ! -f "${PR_CREATED_FILE:?}" ]]; then
 		printf '[]\n'
 		exit 0
@@ -111,7 +125,11 @@ if [[ "${1:-}" == "api" && " $* " == *" repos/test/repo/pulls "* ]]; then
 	exit 0
 fi
 if [[ "${1:-}" == "pr" && "${2:-}" == "create" ]]; then
-	: >"${PR_CREATED_FILE:?}"
+	if [[ -f "${STALE_PR_FILE:?}" ]]; then
+		: >"${PR_RECREATED_FILE:?}"
+	else
+		: >"${PR_CREATED_FILE:?}"
+	fi
 	printf 'created\n'
 	exit 0
 fi
@@ -133,6 +151,8 @@ export DIRECT_PUSH_COUNT="${TEST_ROOT}/direct-push-count"
 export PR_CREATED_FILE="${TEST_ROOT}/pr-created"
 export AUTO_MERGE_FILE="${TEST_ROOT}/auto-merge"
 export PR_MERGED_FILE="${TEST_ROOT}/pr-merged"
+export STALE_PR_FILE="${TEST_ROOT}/stale-pr"
+export PR_RECREATED_FILE="${TEST_ROOT}/pr-recreated"
 export PATH="${BIN}:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export AIDEVOPS_VERSION_MANAGER_REPO_SLUG=test/repo
 
@@ -185,6 +205,18 @@ printf 'PASS recovery branch preserves the original release commit and tag objec
 grep -q '^pr create .*--head chore/release-v1.2.3-provenance .*--base main ' "$FAKE_GH_LOG"
 grep -q "^pr merge 77 --repo test/repo --auto --merge --match-head-commit ${RECOVERY_HEAD}$" "$FAKE_GH_LOG"
 printf 'PASS recovery queues merge topology against the exact PR head\n'
+
+STALE_PR_HEAD="$CURRENT_MAIN"
+export STALE_PR_HEAD
+: >"$STALE_PR_FILE"
+create_calls_before=$(grep -c '^pr create ' "$FAKE_GH_LOG")
+_version_manager_create_or_reuse_protected_pr test/repo 1.2.3 "$RECOVERY_BRANCH" \
+	"$RECOVERY_HEAD" "$TAG_OBJECT" "$RELEASE_COMMIT" >/dev/null
+create_calls_after=$(grep -c '^pr create ' "$FAKE_GH_LOG")
+[[ "$create_calls_after" -eq "$((create_calls_before + 1))" ]]
+[[ -f "$PR_RECREATED_FILE" ]]
+rm -f "$STALE_PR_FILE"
+printf 'PASS stale closed PR is replaced by a new exact-head recovery PR\n'
 
 printf 'unreviewed descendant\n' >"${REPO}/unsafe.txt"
 "$REAL_GIT" -C "$REPO" add unsafe.txt
@@ -276,22 +308,22 @@ fi
 "$REAL_GIT" --git-dir="$REMOTE" update-ref refs/heads/main "$MERGED_MAIN"
 printf 'PASS merged protected release still requires exact main ancestry\n'
 
-_version_manager_reconcile_protected_release_tag test/repo v1.2.3 reconcile >/dev/null
-[[ "$_VERSION_MANAGER_PROTECTED_RELEASE_RESULT" == "tag-pushed" ]]
-REMOTE_TAG_OBJECT=$("$REAL_GIT" ls-remote --tags "$REMOTE" refs/tags/v1.2.3 | cut -f1)
-REMOTE_TAG_COMMIT=$("$REAL_GIT" ls-remote --tags "$REMOTE" 'refs/tags/v1.2.3^{}' | cut -f1)
-[[ "$REMOTE_TAG_OBJECT" == "$TAG_OBJECT" ]]
-[[ "$REMOTE_TAG_COMMIT" == "$RELEASE_COMMIT" ]]
-"$REAL_GIT" -C "$REPO" fetch -q origin main --tags
-"$REAL_GIT" -C "$REPO" merge-base --is-ancestor "$RELEASE_COMMIT" origin/main
-[[ "$("$REAL_GIT" -C "$REPO" rev-list --count --grep='^chore(release): bump version to 1.2.3$' origin/main)" == "1" ]]
-printf 'PASS merged recovery publishes the original tag object without a second bump\n'
+reconcile_rc=0
+_version_manager_reconcile_protected_release_tag test/repo v1.2.3 reconcile \
+	>/dev/null 2>&1 || reconcile_rc=$?
+[[ "$reconcile_rc" -ne 0 ]]
+[[ "$_VERSION_MANAGER_PROTECTED_RELEASE_RESULT" == "aggregation-required" ]]
+[[ -z "$("$REAL_GIT" ls-remote --tags "$REMOTE" refs/tags/v1.2.3)" ]]
+printf 'PASS changed protected-main tree requires reviewed aggregation before tag publication\n'
 
-tag_pushes_before=$(grep -c 'push origin refs/tags/v1.2.3:refs/tags/v1.2.3' "$FAKE_GIT_LOG")
-_version_manager_reconcile_protected_release_tag test/repo v1.2.3 reconcile >/dev/null
-tag_pushes_after=$(grep -c 'push origin refs/tags/v1.2.3:refs/tags/v1.2.3' "$FAKE_GIT_LOG")
+tag_pushes_before=$({ grep -c 'push origin refs/tags/v1.2.3:refs/tags/v1.2.3' "$FAKE_GIT_LOG" || true; })
+reconcile_rc=0
+_version_manager_reconcile_protected_release_tag test/repo v1.2.3 reconcile \
+	>/dev/null 2>&1 || reconcile_rc=$?
+tag_pushes_after=$({ grep -c 'push origin refs/tags/v1.2.3:refs/tags/v1.2.3' "$FAKE_GIT_LOG" || true; })
+[[ "$reconcile_rc" -ne 0 ]]
 [[ "$tag_pushes_after" -eq "$tag_pushes_before" ]]
-[[ "$_VERSION_MANAGER_PROTECTED_RELEASE_RESULT" == "remote-tag-present" ]]
-printf 'PASS repeated reconciliation is idempotent\n'
+[[ "$_VERSION_MANAGER_PROTECTED_RELEASE_RESULT" == "aggregation-required" ]]
+printf 'PASS repeated aggregation-required reconciliation is idempotent\n'
 
 exit 0
