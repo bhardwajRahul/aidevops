@@ -632,6 +632,30 @@ _routine_rest_core_allows_next() {
 }
 
 #######################################
+# Evaluate the framework-managed session miner through the same deterministic
+# calendar, retry, lifecycle, and REST-budget path as repository routines.
+#######################################
+_evaluate_session_miner_routine() {
+	local routine_id="r-session-miner"
+	local schedule="${AIDEVOPS_SESSION_MINER_SCHEDULE:-daily(@04:40)}"
+	local last_epoch=0
+	if _routine_retry_blocked "$routine_id"; then
+		return 0
+	fi
+	last_epoch=$(_routine_last_run_epoch "$routine_id")
+	if ! _routine_schedule_is_due "$schedule" "$last_epoch" ""; then
+		return 0
+	fi
+	if ! _routine_rest_core_allows_next "routine_execute:${routine_id}"; then
+		return 0
+	fi
+	echo "[pulse-wrapper] routine ${routine_id} is due (expr=${schedule}, last_run_epoch=${last_epoch})" >>"$LOGFILE"
+	_routine_execute "$routine_id" "Incremental session insight mining" \
+		"scripts/session-miner-pulse.sh --create-issues" "" "$PULSE_DIR"
+	return $?
+}
+
+#######################################
 # Evaluate routines across all pulse-enabled repos
 #
 # Reads TODO.md from each pulse-enabled repo, extracts enabled routines
@@ -655,6 +679,7 @@ evaluate_routines() {
 		echo "[pulse-wrapper] evaluate_routines: repos.json not found — skipping" >>"$LOGFILE"
 		return 0
 	fi
+	_evaluate_session_miner_routine
 
 	local routines_dispatched=0
 	local _routine_slug repo_path
