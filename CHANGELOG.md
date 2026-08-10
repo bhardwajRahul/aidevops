@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.247] - 2026-08-10
+
+### Changed
+
+- Maintenance: Aggregate v3.32.247 release sources
+
 ## [3.32.246] - 2026-08-09
 
 ### Fixed
