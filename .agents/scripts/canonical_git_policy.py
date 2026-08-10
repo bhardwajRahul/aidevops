@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import re
 import tempfile
+from pathlib import Path
 
 from canonical_git_invocation import repository_values, split_invocation
 from canonical_git_readonly import CANONICAL_CHECKS
@@ -133,6 +134,109 @@ def _is_isolated_routines_publisher(
     )
 
 
+def _worktree_remove_target(args: list[str]) -> str:
+    """Return the single remove target when args are in the safe subset."""
+    target = ""
+    invalid = not args or args[0] != "remove"
+    option_terminator = False
+    for arg in ([] if invalid else args[1:]):
+        if option_terminator:
+            if target:
+                invalid = True
+            else:
+                target = arg
+        elif arg == "--":
+            option_terminator = True
+        elif arg in {"-f", "--force"}:
+            continue
+        elif arg.startswith("-"):
+            invalid = True
+        elif target:
+            invalid = True
+        else:
+            target = arg
+    return "" if invalid else target
+
+
+def _git_repo_identity(
+    real_git_path: str, cwd: str, prefix: list[str]
+) -> tuple[str, str, str]:
+    """Return common dir, git dir, and top-level for a Git target."""
+    common_dir = _git_output(
+        real_git_path,
+        cwd,
+        *prefix,
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+    )
+    git_dir = _git_output(
+        real_git_path,
+        cwd,
+        *prefix,
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-dir",
+    )
+    top = _git_output(
+        real_git_path,
+        cwd,
+        *prefix,
+        "rev-parse",
+        "--path-format=absolute",
+        "--show-toplevel",
+    )
+    return common_dir, git_dir, top
+
+
+def _is_linked_worktree_remove_for_canonical(
+    real_git_path: str,
+    effective_cwd: str,
+    prefix: list[str],
+    args: list[str],
+) -> bool:
+    """Allow removing only linked worktrees that belong to this canonical repo."""
+    target = _worktree_remove_target(args)
+    allowed = False
+
+    if target:
+        canonical_common_dir, _canonical_git_dir, canonical_top = _git_repo_identity(
+            real_git_path, effective_cwd, prefix
+        )
+        target_path = Path(target).expanduser()
+        if not target_path.is_absolute():
+            target_path = Path(effective_cwd) / target_path
+        target_real = os.path.realpath(target_path)
+        target_common_dir, target_git_dir, target_top = _git_repo_identity(
+            real_git_path, target_real, []
+        )
+        required_paths = [
+            canonical_common_dir,
+            canonical_top,
+            target_common_dir,
+            target_git_dir,
+            target_top,
+        ]
+        same_common_dir = os.path.realpath(target_common_dir) == os.path.realpath(
+            canonical_common_dir
+        )
+        separate_git_dir = os.path.realpath(target_git_dir) != os.path.realpath(
+            target_common_dir
+        )
+        target_is_toplevel = os.path.realpath(target_top) == target_real
+        target_is_not_canonical = target_real != os.path.realpath(canonical_top)
+        allowed = all(
+            [
+                all(required_paths),
+                same_common_dir,
+                separate_git_dir,
+                target_is_toplevel,
+                target_is_not_canonical,
+            ]
+        )
+    return allowed
+
+
 def classify_git_argv(
     argv: list[str], cwd: str, real_git_path: str, check_unresolved: bool = False
 ) -> tuple[bool, str]:
@@ -161,6 +265,10 @@ def classify_git_argv(
             real_git_path, effective_cwd, prefix, subcommand
         ):
             result = True, "isolated routines publisher mutation"
+        elif subcommand == "worktree" and _is_linked_worktree_remove_for_canonical(
+            real_git_path, effective_cwd, prefix, args
+        ):
+            result = True, "linked-worktree removal for canonical repository"
         elif _is_allowed_canonical(subcommand, args):
             result = True, "read-only canonical operation or linked-worktree creation"
         else:
