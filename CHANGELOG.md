@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.250] - 2026-08-10
+
+### Added
+
+- verify manual published release receipts (#29939)
+
+### Fixed
+
+- Fix symlinked OpenCode session recovery resolver
+- suppress OAuth refresh failure storms (#29944)
+- recover publication worktree cleanup (#29945)
+- harden screen-time profile stats (#29943)
+- normalize legacy reserved release intents (#29937)
+
 ## [3.32.249] - 2026-08-10
 
 ### Fixed
