@@ -10,6 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.248] - 2026-08-10
+
+### Changed
+
+- Refactor: reduce qlty complexity debt (#29918)
+- Refactor: simplify ACP reply destination parsing (#29917)
+- Tests: fix headless PR handoff fixtures (#29905)
+
+### Fixed
+
+- reduce session miner compression complexity (#29916)
+- enforce public de-identification (#29911)
+- bound Unicode arrows in brief transport checks (#29906)
+- scope worker activity metrics by repo (#29904)
+- Preserve proven existing worker signing
+- release interactive-origin worker claims (#29901)
+
 ## [3.32.247] - 2026-08-10
 
 ### Changed
