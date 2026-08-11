@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.253] - 2026-08-11
+
+### Added
+
+- add provenance-preserving content metadata subagent
+
+### Fixed
+
+- preserve merge cooldown diagnosis
+- report pulse capacity from active workers and health fallback (#30031)
+- preserve contributor issue origin provenance
+- fix v3.32.252 aggregate provenance ordering
+
 ## [3.32.252] - 2026-08-11
 
 ### Added
