@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.251] - 2026-08-11
+
+### Changed
+
+- Performance: batch targeted relationship sync
+- Tests: isolate cleanup archive CWD fixtures (#29955)
+
+### Fixed
+
+- trust generated Issue Sync review gates
+- stream large worktree recovery plans
+- guard OpenCode plugin import argv
+- verify task counter-only pushes (#29951)
+
 ## [3.32.250] - 2026-08-10
 
 ### Added
