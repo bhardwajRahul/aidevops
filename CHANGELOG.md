@@ -10,6 +10,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.252] - 2026-08-11
+
+### Added
+
+- scope and reevaluate OpenCode safety pin
+
+### Changed
+
+- Tests: accept current Ajv dependency
+- Documentation: restore AGENTS.md size ratchet
+- Maintenance: sync GitHub issue state to TODO.md [skip ci]
+- Tests: cover dashboard refresh before sweep timeout
+- Refactor: simplify provider failure classifier (#30008)
+
+### Fixed
+
+- fix redundant merged-PR release authorization
+- recover dispatch worktree capacity (#30042)
+- normalize missing auto-dispatch tier labels (#30040)
+- extend manual Issue Sync enrich timeout
+- harden Issue Sync merge authority
+- fix packaged OpenCode virtual argv import
+- refresh dashboard before quality sweep
+- coordinate exact-tip release merges (#30001)
+- enforce interactive gh shim and privacy dependencies (#29999)
+- validate aggregate release recovery (#30000)
+
 ## [3.32.251] - 2026-08-11
 
 ### Changed
