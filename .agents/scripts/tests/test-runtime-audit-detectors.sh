@@ -53,6 +53,19 @@ assert_contains() {
 	return 0
 }
 
+assert_not_contains() {
+	local label="$1" needle="$2" haystack="$3"
+	TESTS_RUN=$((TESTS_RUN + 1))
+	if printf '%s' "$haystack" | grep -qF -- "$needle" 2>/dev/null; then
+		TESTS_FAILED=$((TESTS_FAILED + 1))
+		echo "${TEST_RED}FAIL${TEST_NC}: $label"
+		echo "  expected not to find: $(printf '%q' "$needle")"
+	else
+		echo "${TEST_GREEN}PASS${TEST_NC}: $label"
+	fi
+	return 0
+}
+
 assert_empty() {
 	local label="$1" value="$2"
 	TESTS_RUN=$((TESTS_RUN + 1))
@@ -90,7 +103,8 @@ trap 'rm -rf "$TMPDIR_TEST"' EXIT
 # Helper: run a detector in a clean subshell with an env block, capture
 # stdout and rc.
 _run_detector() {
-	local detector_file="$1"; shift
+	local detector_file="$1"
+	shift
 	local out
 	local rc=0
 	# shellcheck disable=SC2068  # passing through env assignments
@@ -253,8 +267,8 @@ mkdir -p "$DRIFT_DEPLOYED" "$DRIFT_SOURCE"
 
 # pulse-wrapper.sh: deployed touched 3 days ago, source touched 1 minute ago
 # → drift = ~3 days = 259200 > DRIFT_SECONDS (3600 in this test)
-echo "deployed-content" > "$DRIFT_DEPLOYED/pulse-wrapper.sh"
-echo "source-content"   > "$DRIFT_SOURCE/pulse-wrapper.sh"
+echo "deployed-content" >"$DRIFT_DEPLOYED/pulse-wrapper.sh"
+echo "source-content" >"$DRIFT_SOURCE/pulse-wrapper.sh"
 
 # Use touch -t to set deployed mtime in the past
 # Format: [[CC]YY]MMDDhhmm[.SS]
@@ -274,13 +288,18 @@ assert_rc "3.1 firing fixture returns 1" "1" "$rc"
 assert_contains "3.2 firing body has correct id" '"id": "deployed-vs-source-mtime-drift"' "$out"
 assert_contains "3.3 firing references file" "pulse-wrapper.sh" "$out"
 assert_contains "3.4 firing body has marker" 'detector=deployed-vs-source-mtime-drift' "$out"
+assert_contains "3.5 firing body embeds bounded comparison evidence" "-deployed-content" "$out"
+assert_contains "3.6 firing body embeds source-side comparison evidence" "+source-content" "$out"
+assert_contains "3.7 firing body embeds SHA-256 evidence" "Deployed SHA-256" "$out"
+assert_not_contains "3.8 worker brief omits canonical source directory" "$DRIFT_SOURCE" "$out"
+assert_not_contains "3.9 worker brief omits trusted deployed directory" "$DRIFT_DEPLOYED" "$out"
 
 # Clean fixture: same mtime on both sides
 DRIFT_DEPLOYED2="$TMPDIR_TEST/deployed2"
 DRIFT_SOURCE2="$TMPDIR_TEST/source2"
 mkdir -p "$DRIFT_DEPLOYED2" "$DRIFT_SOURCE2"
-echo "x" > "$DRIFT_DEPLOYED2/pulse-wrapper.sh"
-echo "x" > "$DRIFT_SOURCE2/pulse-wrapper.sh"
+echo "x" >"$DRIFT_DEPLOYED2/pulse-wrapper.sh"
+echo "x" >"$DRIFT_SOURCE2/pulse-wrapper.sh"
 # Touch both with same reference — touch -r preserves mtime exactly.
 touch -r "$DRIFT_DEPLOYED2/pulse-wrapper.sh" "$DRIFT_SOURCE2/pulse-wrapper.sh"
 
@@ -289,14 +308,14 @@ out=$(_run_detector "$RULES_DIR/deployed-vs-source-mtime-drift.sh" \
 	"AIDEVOPS_SOURCE_DIR=$DRIFT_SOURCE2" \
 	"DRIFT_SECONDS=3600" \
 	"WATCHED_FILES=pulse-wrapper.sh") && rc=0 || rc=$?
-assert_rc "3.5 same-mtime fixture returns 0" "0" "$rc"
-assert_empty "3.6 same-mtime emits no output" "$out"
+assert_rc "3.10 same-mtime fixture returns 0" "0" "$rc"
+assert_empty "3.11 same-mtime emits no output" "$out"
 
 # Missing dirs → no-op
 out=$(_run_detector "$RULES_DIR/deployed-vs-source-mtime-drift.sh" \
 	"AIDEVOPS_DEPLOYED_DIR=/nonexistent/x" \
 	"AIDEVOPS_SOURCE_DIR=/nonexistent/y") && rc=0 || rc=$?
-assert_rc "3.7 missing dirs returns 0" "0" "$rc"
+assert_rc "3.12 missing dirs returns 0" "0" "$rc"
 
 # ---------------------------------------------------------------------------
 # Test 4: log-pattern-novelty
@@ -321,7 +340,7 @@ LOG_FIRING="$TMPDIR_TEST/log-firing.log"
 	for i in $(seq 1 50); do
 		printf '2026-04-30T00:00:00Z OTHER recent line padding iteration %d\n' "$i"
 	done
-} > "$LOG_FIRING"
+} >"$LOG_FIRING"
 
 out=$(_run_detector "$RULES_DIR/log-pattern-novelty.sh" \
 	"LOG_FILE=$LOG_FIRING" \
@@ -344,7 +363,7 @@ LOG_PID_STABLE="$TMPDIR_TEST/log-pid-stable.log"
 	for _ in $(seq 1 100); do
 		printf 'Acquired lock (PID 1220368, age 5s, holder: pulse-instance-lock.sh)\n'
 	done
-} > "$LOG_PID_STABLE"
+} >"$LOG_PID_STABLE"
 
 out=$(_run_detector "$RULES_DIR/log-pattern-novelty.sh" \
 	"LOG_FILE=$LOG_PID_STABLE" \
@@ -358,7 +377,7 @@ assert_empty "4.7 equivalent PID templates emit no finding" "$out"
 LOG_SHORT="$TMPDIR_TEST/log-short.log"
 for i in $(seq 1 50); do
 	printf 'short line %d\n' "$i"
-done > "$LOG_SHORT"
+done >"$LOG_SHORT"
 
 out=$(_run_detector "$RULES_DIR/log-pattern-novelty.sh" \
 	"LOG_FILE=$LOG_SHORT" \
@@ -377,7 +396,7 @@ echo ""
 echo "--- Section 5: idle-state-stuck ---"
 
 PID_FIRING="$TMPDIR_TEST/pid-firing.pid"
-echo "SETUP:99999" > "$PID_FIRING"
+echo "SETUP:99999" >"$PID_FIRING"
 
 # Fake "PID dead" callable
 FAKE_DEAD="$TMPDIR_TEST/pid-dead.sh"
@@ -411,7 +430,7 @@ assert_empty "5.6 alive-PID emits no output" "$out"
 
 # No SETUP marker → no-op
 PID_CLEAN="$TMPDIR_TEST/pid-clean.pid"
-echo "12345" > "$PID_CLEAN"
+echo "12345" >"$PID_CLEAN"
 out=$(_run_detector "$RULES_DIR/idle-state-stuck.sh" \
 	"PID_FILE=$PID_CLEAN") && rc=0 || rc=$?
 assert_rc "5.7 no-SETUP-marker returns 0" "0" "$rc"
