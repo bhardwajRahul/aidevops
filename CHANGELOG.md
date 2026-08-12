@@ -10,6 +10,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.254] - 2026-08-13
+
+### Added
+
+- streamline review approvals
+
+### Changed
+
+- Documentation: document stale runner image recovery
+
+### Fixed
+
+- publish dashboard freshness before maintenance
+- stop duplicate dashboard freshness incidents
+- preserve canonical claim refresh continuity (#30130)
+- serialize opencode pin repair for worker canaries (#30119)
+- ignore historical supervisor dashboards (#30114) (#30123)
+- bound dashboard activity helpers (#30122)
+- preserve health dashboard refresh budget (#30113)
+- prune closed NMR revalidation state
+- propagate CI repair worker identity
+- fix Linux Tabby config discovery
+- persist hosted relationship progress
+- recover exact failed launch attempts
+- refresh priority dashboard before cache work (#30103)
+- skip historical dashboard enumeration (#30104)
+- prioritize supervisor dashboard refresh (#30099)
+- preserve GH audit anomaly evidence (#30098)
+- sanitize health dashboard publication (#30086)
+- repair broken managed OpenCode shims (#30085)
+- exclude OAuth auth-error providers from routing
+- prioritize planning publication
+- shorten safe release-lane recovery (#30067)
+
+### Security
+
+- preserve locked approval continuity (#30095)
+
 ## [3.32.253] - 2026-08-11
 
 ### Added
