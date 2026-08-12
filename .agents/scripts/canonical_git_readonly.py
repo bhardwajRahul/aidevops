@@ -91,10 +91,55 @@ def _bundle_is_read_only(args: list[str]) -> bool:
     return len(paths) == 1 and not paths[0].startswith("-")
 
 
+def _is_hash_object_write_flag(arg: str) -> bool:
+    return arg == "-w" or (
+        arg.startswith("-") and not arg.startswith("--") and "w" in arg[1:]
+    )
+
+
+def _hash_object_options(args: list[str]) -> list[str]:
+    try:
+        return args[: args.index("--")]
+    except ValueError:
+        return args
+
+
+def _is_unknown_hash_object_option(arg: str) -> bool:
+    read_only_options = {
+        "--literally",
+        "--no-filters",
+        "--stdin",
+        "--stdin-paths",
+    }
+    return (
+        arg.startswith("-")
+        and arg not in read_only_options
+        and not arg.startswith("--path=")
+    )
+
+
+def _hash_object_is_read_only(args: list[str]) -> bool:
+    """Allow hashing inputs while rejecting object database writes."""
+    expect_value = False
+
+    for arg in _hash_object_options(args):
+        if expect_value:
+            expect_value = False
+            continue
+        if arg == "-t":
+            expect_value = True
+            continue
+        if _is_hash_object_write_flag(arg) or _is_unknown_hash_object_option(arg):
+            return False
+
+    return not expect_value
+
+
 CANONICAL_CHECKS: dict[str, Callable[[list[str]], bool]] = {
     "branch": _branch_is_read_only,
     "bundle": _bundle_is_read_only,
     "config": _config_is_read_only,
     "clean": _clean_is_read_only,
+    "hash-object": _hash_object_is_read_only,
     **REF_QUERY_CHECKS,
 }
