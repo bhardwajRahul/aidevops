@@ -161,15 +161,19 @@ def _unknown_provider_outcome(
     database: sqlite3.Connection,
     claimed: ClaimedOperation,
     executor_id: str,
-    failure_class: str,
+    provider_outcome: tuple[str | None, str],
     args: argparse.Namespace,
 ) -> dict[str, Any]:
+    provider_remote_id, failure_class = provider_outcome
     return finalize_operation(
         database,
         claimed,
         executor_id,
         AttemptOutcome(
-            "unknown", failure_class=failure_class, finished_at=_clock(args)
+            "unknown",
+            provider_remote_id=provider_remote_id,
+            failure_class=failure_class,
+            finished_at=_clock(args),
         ),
     )
 
@@ -205,7 +209,11 @@ def _execute_claimed(
     provider_remote_id, failure_class = provider.invoke()
     if failure_class is not None:
         return _unknown_provider_outcome(
-            database, claimed, executor_id, failure_class, args
+            database,
+            claimed,
+            executor_id,
+            (provider_remote_id, failure_class),
+            args,
         )
     if provider_remote_id is None:
         raise OperationsError("successful provider outcome has no remote ID")
