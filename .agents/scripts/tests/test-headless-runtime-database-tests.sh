@@ -189,13 +189,59 @@ SQL
 	seed_definition=$(declare -f _seed_worker_db_session_context)
 	initialize_definition=$(declare -f _initialize_worker_db_from_shared_schema)
 
-	if [[ "$user_version" == "42" && "$schema_migrations" == "1" && "$sessions" == "1" && "$other_sessions" == "0" && "$messages" == "1" && "$other_messages" == "0" && "$projects" == "1" && "$other_projects" == "0" && "$seed_definition" != *".backup"* && "$initialize_definition" == *'".schema"'* ]]; then
+	if [[ "$user_version" == "42" && "$schema_migrations" == "1" && "$sessions" == "1" && "$other_sessions" == "0" && "$messages" == "1" && "$other_messages" == "0" && "$projects" == "1" && "$other_projects" == "0" && "$seed_definition" != *".backup"* && "$initialize_definition" == *'".schema --nosys"'* ]]; then
 		print_result "seed worker DB uses shared schema for fresh continuation DB" 0
 		return 0
 	fi
 
 	print_result "seed worker DB uses shared schema for fresh continuation DB" 1 \
 		"user_version=$user_version schema_migrations=$schema_migrations sessions=$sessions other_sessions=$other_sessions messages=$messages other_messages=$other_messages projects=$projects other_projects=$other_projects"
+	return 0
+}
+
+test_fresh_worker_db_uses_shared_schema_before_launch() {
+	local shared_dir="${HOME}/.local/share/opencode"
+	local isolated_dir="${TEST_ROOT}/isolated-opencode-fresh-run"
+	local isolated_data_dir="$isolated_dir"
+	local shared_db="${shared_dir}/opencode.db"
+	local worker_db="${isolated_dir}/opencode/opencode.db"
+	mkdir -p "$shared_dir" "${isolated_dir}/opencode"
+	rm -f "$shared_db" "$worker_db"
+
+	sqlite3 "$shared_db" <<'SQL'
+PRAGMA user_version = 77;
+CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash TEXT NOT NULL, created_at INTEGER);
+CREATE TABLE project (id TEXT PRIMARY KEY, name TEXT NOT NULL);
+CREATE TABLE session (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, title TEXT NOT NULL);
+CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, data TEXT NOT NULL);
+INSERT INTO __drizzle_migrations VALUES (1, 'shared-ready', 12345);
+INSERT INTO project VALUES ('shared-project', 'must-not-copy');
+INSERT INTO session VALUES ('shared-session', 'shared-project', 'must-not-copy');
+CREATE INDEX session_project_idx ON session (project_id);
+ANALYZE;
+SQL
+
+	local runtime_role="worker"
+	local public_triage=0
+	local private_workload=0
+	local exit_code_file="${TEST_ROOT}/fresh-run-exit-code"
+	local _invoke_persisted_session=""
+	local _invoke_work_dir="${TEST_ROOT}"
+	_invoke_opencode_export_isolation
+
+	local user_version="" migration_rows="" session_rows="" stat_rows="" graph_match=1
+	user_version=$(sqlite3 "$worker_db" "PRAGMA user_version;")
+	migration_rows=$(sqlite3 "$worker_db" "SELECT COUNT(*) FROM __drizzle_migrations WHERE hash = 'shared-ready';")
+	session_rows=$(sqlite3 "$worker_db" "SELECT COUNT(*) FROM session;")
+	stat_rows=$(sqlite3 "$worker_db" "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'sqlite_stat1';")
+	_opencode_db_graph_schema_matches "$worker_db" "$shared_db" || graph_match=0
+
+	if [[ "$user_version" == "77" && "$migration_rows" == "1" && "$session_rows" == "0" && "$stat_rows" == "0" && "$graph_match" -eq 1 ]]; then
+		print_result "fresh worker DB uses shared schema before runtime launch" 0
+		return 0
+	fi
+	print_result "fresh worker DB uses shared schema before runtime launch" 1 \
+		"user_version=$user_version migrations=$migration_rows sessions=$session_rows stats=$stat_rows graph_match=$graph_match"
 	return 0
 }
 

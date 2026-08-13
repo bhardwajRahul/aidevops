@@ -278,7 +278,7 @@ _initialize_worker_db_from_shared_schema() {
 	local shared_db="$2"
 	local schema_sql user_version
 
-	schema_sql=$(sqlite3_with_timeout "$shared_db" ".schema" 2>/dev/null) || return 1
+	schema_sql=$(sqlite3_with_timeout "$shared_db" ".schema --nosys" 2>/dev/null) || return 1
 	[[ -n "$schema_sql" ]] || return 1
 	rm -f "$worker_db" "${worker_db}-wal" "${worker_db}-shm" 2>/dev/null || return 1
 	if ! printf '%s\n' "$schema_sql" | sqlite3_with_timeout "$worker_db" >/dev/null 2>&1; then

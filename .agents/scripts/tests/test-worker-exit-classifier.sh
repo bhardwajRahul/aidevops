@@ -74,7 +74,37 @@ teardown() {
 _make_db() {
 	local db_path="$1"
 	sqlite3 "$db_path" \
-		"CREATE TABLE IF NOT EXISTS session (id TEXT, title TEXT, time_created INTEGER); CREATE TABLE IF NOT EXISTS message (id TEXT, session_id TEXT, time_created INTEGER);" \
+		"CREATE TABLE IF NOT EXISTS session (id TEXT, title TEXT, time_created INTEGER); CREATE TABLE IF NOT EXISTS message (id TEXT, session_id TEXT, time_created INTEGER, data TEXT); CREATE TABLE IF NOT EXISTS part (id TEXT, message_id TEXT, session_id TEXT, time_created INTEGER, data TEXT);" \
+		2>/dev/null
+	return 0
+}
+
+_insert_assistant_message() {
+	local db_path="$1"
+	local session_id="$2"
+	local ts_ms="$3"
+	local completed="${4:-true}"
+	local message_data='{"role":"assistant"}'
+	if [[ "$completed" == "true" ]]; then
+		message_data='{"role":"assistant","time":{"completed":1}}'
+	fi
+	sqlite3 "$db_path" \
+		"INSERT INTO message VALUES ('message-$(date +%s%N)', '${session_id}', ${ts_ms}, '${message_data}');" \
+		2>/dev/null
+	return 0
+}
+
+_insert_assistant_part() {
+	local db_path="$1"
+	local session_id="$2"
+	local ts_ms="$3"
+	local role="${4:-assistant}"
+	local message_id="message-part-${role}"
+	sqlite3 "$db_path" \
+		"INSERT INTO message VALUES ('${message_id}', '${session_id}', ${ts_ms}, '{\"role\":\"${role}\"}');" \
+		2>/dev/null
+	sqlite3 "$db_path" \
+		"INSERT INTO part VALUES ('part-${role}', '${message_id}', '${session_id}', ${ts_ms}, '{\"type\":\"text\"}');" \
 		2>/dev/null
 	return 0
 }
@@ -84,17 +114,6 @@ _insert_session() {
 	local ts_ms="$2"
 	sqlite3 "$db_path" \
 		"INSERT INTO session VALUES ('test-id-$(date +%s%N)', 'test session', ${ts_ms});" \
-		2>/dev/null
-	return 0
-}
-
-_insert_message() {
-	local db_path="$1"
-	local session_id="$2"
-	local ts_ms="$3"
-	local session_id_sql="${session_id//\'/\'\'}"
-	sqlite3 "$db_path" \
-		"INSERT INTO message VALUES ('message-$(date +%s%N)', '${session_id_sql}', ${ts_ms});" \
 		2>/dev/null
 	return 0
 }
@@ -199,54 +218,79 @@ test_clean_exit_session_before_start() {
 	return 0
 }
 
-# GH#30173: a continued session retains its original creation time, so a new
-# message scoped to that session is the attempt activity signal.
-test_clean_exit_continued_session_with_new_message() {
+test_clean_exit_continued_session_with_assistant_activity() {
 	local db_path="${TMPDIR_TEST}/clean-continued-session.db"
-	local persisted_session="continued'session"
 	_make_db "$db_path"
 	local old_ts=$(( $(_now_ms) - 10000 ))
-	sqlite3 "$db_path" \
-		"INSERT INTO session VALUES ('continued''session', 'continued session', ${old_ts});" \
-		2>/dev/null
 	local start_ms
+	sqlite3 "$db_path" "INSERT INTO session VALUES ('continued-session', 'continued', ${old_ts});"
 	start_ms=$(_now_ms)
-	_insert_message "$db_path" "$persisted_session" "$start_ms"
+	_insert_assistant_message "$db_path" "continued-session" "$start_ms"
 
 	_WORKER_ISOLATED_DB_PATH="$db_path"
+	local result count
+	result=$(classify_worker_exit 0 "$start_ms" "continued-session")
 	_WORKER_START_EPOCH_MS="$start_ms"
-	_invoke_persisted_session="$persisted_session"
-	local result
-	result=$(classify_worker_exit 0 "$start_ms")
-	local activity_count
-	activity_count=$(_hrff_worker_session_count)
-	unset _WORKER_ISOLATED_DB_PATH _WORKER_START_EPOCH_MS _invoke_persisted_session
+	_WORKER_PERSISTED_SESSION_ID="continued-session"
+	count=$(_hrff_worker_session_count)
+	unset _WORKER_ISOLATED_DB_PATH _WORKER_START_EPOCH_MS _WORKER_PERSISTED_SESSION_ID
 
-	assert_eq "clean (continued session with new message)" "$result" "clean"
-	assert_eq "continued-session activity count" "$activity_count" "1"
+	assert_eq "clean (continued session produced assistant activity)" "$result" "clean"
+	assert_eq "continued session activity count" "$count" "1"
 	return 0
 }
 
-test_clean_exit_continued_session_without_scoped_activity() {
-	local db_path="${TMPDIR_TEST}/clean-continued-session-no-activity.db"
-	local persisted_session="continued-session"
+test_clean_exit_continued_session_placeholder_only() {
+	local db_path="${TMPDIR_TEST}/clean-continued-placeholder.db"
 	_make_db "$db_path"
 	local old_ts=$(( $(_now_ms) - 10000 ))
-	sqlite3 "$db_path" \
-		"INSERT INTO session VALUES ('continued-session', 'continued session', ${old_ts});" \
-		2>/dev/null
 	local start_ms
+	sqlite3 "$db_path" "INSERT INTO session VALUES ('continued-placeholder', 'continued', ${old_ts});"
 	start_ms=$(_now_ms)
-	_insert_message "$db_path" "different-session" "$start_ms"
+	_insert_assistant_message "$db_path" "continued-placeholder" "$start_ms" false
 
 	_WORKER_ISOLATED_DB_PATH="$db_path"
-	_invoke_persisted_session="$persisted_session"
 	local result
-	result=$(classify_worker_exit 0 "$start_ms")
-	unset _WORKER_ISOLATED_DB_PATH _invoke_persisted_session
+	result=$(classify_worker_exit 0 "$start_ms" "continued-placeholder")
+	unset _WORKER_ISOLATED_DB_PATH
 
-	assert_eq "worker_noop_zero_output (continued session without scoped activity)" \
-		"$result" "worker_noop_zero_output"
+	assert_eq "worker_noop_zero_output (continued placeholder only)" "$result" "worker_noop_zero_output"
+	return 0
+}
+
+test_crash_continued_session_with_part_activity() {
+	local db_path="${TMPDIR_TEST}/crash-continued-part.db"
+	_make_db "$db_path"
+	local old_ts=$(( $(_now_ms) - 10000 ))
+	local start_ms
+	sqlite3 "$db_path" "INSERT INTO session VALUES ('continued-part', 'continued', ${old_ts});"
+	start_ms=$(_now_ms)
+	_insert_assistant_part "$db_path" "continued-part" "$start_ms"
+
+	_WORKER_ISOLATED_DB_PATH="$db_path"
+	local result
+	result=$(classify_worker_exit 1 "$start_ms" "continued-part")
+	unset _WORKER_ISOLATED_DB_PATH
+
+	assert_eq "crash_during_execution (continued session part activity)" "$result" "crash_during_execution"
+	return 0
+}
+
+test_clean_exit_continued_session_with_user_part_only() {
+	local db_path="${TMPDIR_TEST}/clean-continued-user-part.db"
+	_make_db "$db_path"
+	local old_ts=$(( $(_now_ms) - 10000 ))
+	local start_ms
+	sqlite3 "$db_path" "INSERT INTO session VALUES ('continued-user-part', 'continued', ${old_ts});"
+	start_ms=$(_now_ms)
+	_insert_assistant_part "$db_path" "continued-user-part" "$start_ms" "user"
+
+	_WORKER_ISOLATED_DB_PATH="$db_path"
+	local result
+	result=$(classify_worker_exit 0 "$start_ms" "continued-user-part")
+	unset _WORKER_ISOLATED_DB_PATH
+
+	assert_eq "worker_noop_zero_output (continued user part only)" "$result" "worker_noop_zero_output"
 	return 0
 }
 
@@ -325,7 +369,7 @@ test_crash_during_startup_session_before_start() {
 	_make_db "$db_path"
 
 	# Insert session with timestamp 10 seconds in the past
-	local old_ts=$(( $(_now_ms) - 10000 ))
+	local old_ts=$(($(_now_ms) - 10000))
 	_insert_session "$db_path" "$old_ts"
 
 	# Worker "start" is now (after the old session)
@@ -549,13 +593,15 @@ main() {
 	test_clean_exit_zero_sessions
 	test_clean_exit_with_sessions
 	test_clean_exit_session_before_start
-	test_clean_exit_continued_session_with_new_message
-	test_clean_exit_continued_session_without_scoped_activity
+	test_clean_exit_continued_session_with_assistant_activity
+	test_clean_exit_continued_session_placeholder_only
+	test_clean_exit_continued_session_with_user_part_only
 	test_signal_killed_with_zero_sessions
 	test_crash_during_startup_empty_db
 	test_crash_during_startup_no_db
 	test_crash_during_execution_session_in_db
 	test_crash_during_startup_session_before_start
+	test_crash_continued_session_with_part_activity
 	test_classifier_failure_corrupt_db
 	test_no_start_time_empty_db
 	test_no_start_time_with_sessions
