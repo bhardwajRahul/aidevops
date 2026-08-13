@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.258] - 2026-08-13
+
+### Changed
+
+- Documentation: aggregate release for awardsapp pulse fix
+
+### Fixed
+
+- preserve Remotion help behavior (#30194)
+- preserve awardsapp pulse worker dispatch
+- detect continued-session worker activity
+
 ## [3.32.257] - 2026-08-13
 
 ### Added
