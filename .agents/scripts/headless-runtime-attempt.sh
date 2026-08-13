@@ -259,6 +259,7 @@ _configure_run_attempt_context() {
 	_invoke_provider="$provider"
 	_invoke_role="$role"
 	_invoke_persisted_session="$persisted_session"
+	_WORKER_PERSISTED_SESSION_ID="$persisted_session"
 	_invoke_work_dir="$work_dir"
 	export WORKER_SESSION_KEY="$session_key"
 	_t3077_setup_fix_the_fixer_observability "${WORKER_ISSUE_NUMBER:-}" "${DISPATCH_REPO_SLUG:-}" || true
@@ -368,6 +369,8 @@ _retry_run_attempt_without_stale_session() {
 	print_warning "Stale session ID detected for ${session_key} — clearing and retrying without --session (GH#16978)"
 	clear_session_id "$provider" "$session_key"
 	persisted_session=""
+	_invoke_persisted_session=""
+	_WORKER_PERSISTED_SESSION_ID=""
 	rm -f "$output_file"
 	output_file=$(_create_headless_runtime_temp_file) || return 1
 	_register_headless_runtime_output_temp_path "$role" "$output_file" || return 1

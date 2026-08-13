@@ -43,6 +43,57 @@ EOF
 	return 0
 }
 
+test_stale_session_retry_clears_continuation_state() {
+	local state_file="${TEST_ROOT}/stale-session-retry-state"
+	local output_path="${TEST_ROOT}/stale-session-output"
+	local exit_path="${TEST_ROOT}/stale-session-exit"
+	local state=""
+	printf '%s\n' "Session not found" >"$output_path"
+
+	state=$(
+		local exit_code=1 runtime="opencode" persisted_session="ses_stale"
+		local _invoke_persisted_session="ses_stale" _WORKER_PERSISTED_SESSION_ID="ses_stale"
+		local output_file="$output_path" exit_code_file="$exit_path"
+		local session_key="issue-30153" provider="openai" role="worker"
+		local selected_model="openai/test" work_dir="$TEST_ROOT" prompt_arg="prompt" title="title"
+		local variant_override="" agent_name="build" _metric_kill_reason="" _run_watchdog_hard_killed=0
+		local -a cmd=() extra_args=()
+		clear_session_id() { return 0; }
+		_create_headless_runtime_temp_file() {
+			mktemp "${TEST_ROOT}/stale-session-retry.XXXXXX"
+			return $?
+		}
+		_register_headless_runtime_output_temp_path() { return 0; }
+		_register_headless_runtime_temp_path() { return 0; }
+		_build_run_cmd() {
+			printf '%s\0' "opencode" "run"
+			return 0
+		}
+		_begin_worker_runtime_run() { return 0; }
+		_invoke_opencode() {
+			local invoke_output="$1"
+			local invoke_exit="$2"
+			: "$invoke_output"
+			printf '%s' "0" >"$invoke_exit"
+			printf '%s|%s|%s' "${_invoke_persisted_session:-}" "${_WORKER_PERSISTED_SESSION_ID:-}" "${persisted_session:-}" >"$state_file"
+			return 0
+		}
+		_normalize_worker_exit_code_and_kill_reason() {
+			printf '0\tunknown\n'
+			return 0
+		}
+		_retry_run_attempt_without_stale_session >/dev/null
+		printf '%s|%s' "$(<"$state_file")" "$exit_code"
+	)
+
+	if [[ "$state" == "|||0" ]]; then
+		print_result "stale session retry clears continuation seeding and classification state" 0
+		return 0
+	fi
+	print_result "stale session retry clears continuation seeding and classification state" 1 "state=${state:-<empty>}"
+	return 0
+}
+
 test_provider_sessions_scope_issue_keys_by_repo_slug() {
 	local provider="openai"
 	local model="openai/gpt-5.5"
