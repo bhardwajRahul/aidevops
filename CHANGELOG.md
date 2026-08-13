@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.255] - 2026-08-13
+
+### Added
+
+- add campaign production manifests (#30162)
+- add campaign research dossiers (#30158)
+- add campaign intake contract (#30152)
+
+### Fixed
+
+- prevent Tabby profile config corruption
+- isolate pinned OpenCode headless runtime
+- isolate pinned OpenCode headless runtime
+- preserve planning publication audit evidence (#30161)
+- normalize legacy published release lanes
+
 ## [3.32.254] - 2026-08-13
 
 ### Added
