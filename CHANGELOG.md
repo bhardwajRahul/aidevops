@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.257] - 2026-08-13
+
+### Added
+
+- harden campaign asset provenance gates
+
+### Fixed
+
+- recover stale OpenCode pin repair locks
+- split Remotion render contracts (#30175)
+
+### Security
+
+- freeze auto-dispatch issue instructions
+
 ## [3.32.256] - 2026-08-13
 
 ### Changed
