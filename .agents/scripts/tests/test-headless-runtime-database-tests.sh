@@ -373,6 +373,121 @@ SQL
 	return 0
 }
 
+test_fresh_worker_db_initializes_shared_schema_before_session_merge() {
+	local shared_dir="${HOME}/.local/share/opencode"
+	local isolated_dir="${TEST_ROOT}/fresh-opencode-session-merge"
+	local shared_db="${shared_dir}/opencode.db"
+	local worker_db="${isolated_dir}/opencode/opencode.db"
+	local initialize_status=0 merge_status=0 graph_matches=0 ledger_rows="" session_count=""
+	mkdir -p "$shared_dir" "${isolated_dir}/opencode"
+	rm -f "$shared_db" "$worker_db"
+
+	create_complete_opencode_test_schema "$shared_db"
+	sqlite3 "$shared_db" <<'SQL'
+CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash TEXT NOT NULL, created_at INTEGER);
+INSERT INTO __drizzle_migrations VALUES (1, 'shared-schema-ready', 12345);
+SQL
+
+	_initialize_worker_db_from_shared_schema "$worker_db" "$shared_db" || initialize_status=$?
+	_opencode_db_graph_schema_matches "$worker_db" "$shared_db" || graph_matches=1
+	ledger_rows=$(sqlite3 "$worker_db" "SELECT COUNT(*) FROM __drizzle_migrations WHERE hash = 'shared-schema-ready';")
+	# Simulate OpenCode creating a first-time worker session after isolation setup.
+	sqlite3 "$worker_db" <<'SQL'
+INSERT INTO project VALUES ('project-fresh', 'Fresh Worker Project');
+INSERT INTO project_directory VALUES ('project-fresh', '/fresh');
+INSERT INTO session VALUES ('session-fresh', 'project-fresh', '/fresh', 'Fresh Worker Session');
+INSERT INTO message VALUES ('message-fresh', 'session-fresh', 'worker output');
+INSERT INTO part VALUES ('part-fresh', 'message-fresh', 'session-fresh', 'worker output');
+INSERT INTO session_input VALUES ('input-fresh', 'session-fresh', 'input');
+INSERT INTO event_sequence VALUES ('session-fresh', 1);
+INSERT INTO event VALUES ('event-fresh', 'session-fresh', 1, 'created');
+SQL
+	_merge_worker_db "$isolated_dir" || merge_status=$?
+	session_count=$(sqlite3 "$shared_db" "SELECT COUNT(*) FROM session WHERE id = 'session-fresh';")
+
+	if [[ "$initialize_status" -eq 0 && "$graph_matches" -eq 0 && "$ledger_rows" == "1" && "$merge_status" -eq 0 && "$session_count" == "1" ]]; then
+		print_result "fresh worker DB uses shared schema and merges its first session" 0
+		return 0
+	fi
+
+	print_result "fresh worker DB uses shared schema and merges its first session" 1 \
+		"initialize=$initialize_status graph_matches=$graph_matches ledger_rows=$ledger_rows merge=$merge_status session_count=$session_count"
+	return 0
+}
+
+test_fresh_worker_isolation_prepares_and_finalizes_first_session() {
+	local shared_dir="${HOME}/.local/share/opencode"
+	local isolated_dir="${TEST_ROOT}/fresh-opencode-invocation"
+	local shared_db="${shared_dir}/opencode.db"
+	local exit_code_file="${TEST_ROOT}/fresh-opencode-invocation.exit"
+	local invocation_status=0 session_count="" isolated_exists=""
+	mkdir -p "$shared_dir" "${isolated_dir}/opencode"
+	rm -f "$shared_db" "$exit_code_file"
+
+	create_complete_opencode_test_schema "$shared_db"
+	sqlite3 "$shared_db" <<'SQL'
+CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash TEXT NOT NULL, created_at INTEGER);
+INSERT INTO __drizzle_migrations VALUES (1, 'shared-schema-ready', 12345);
+SQL
+
+	if ! (
+		local isolated_data_dir="$isolated_dir"
+		local runtime_role="worker"
+		local public_triage=0 private_workload=0
+		local exit_code_file="$exit_code_file"
+		_invoke_persisted_session=""
+		_invoke_opencode_export_isolation
+		sqlite3 "${isolated_data_dir}/opencode/opencode.db" <<'SQL'
+INSERT INTO project VALUES ('project-invocation', 'Fresh Invocation Project');
+INSERT INTO session VALUES ('session-invocation', 'project-invocation', '/invocation', 'Fresh Invocation Session');
+INSERT INTO message VALUES ('message-invocation', 'session-invocation', 'worker output');
+SQL
+		_finalize_isolated_runtime_data "$isolated_data_dir" "$runtime_role"
+	); then
+		invocation_status=1
+	fi
+	session_count=$(sqlite3 "$shared_db" "SELECT COUNT(*) FROM session WHERE id = 'session-invocation';")
+	isolated_exists=$([[ -e "$isolated_dir" ]] && printf yes || printf no)
+
+	if [[ "$invocation_status" -eq 0 && "$session_count" == "1" && "$isolated_exists" == "no" ]]; then
+		print_result "fresh worker isolation initializes and finalizes its first session" 0
+		return 0
+	fi
+
+	print_result "fresh worker isolation initializes and finalizes its first session" 1 \
+		"invocation=$invocation_status session_count=$session_count isolated_exists=$isolated_exists"
+	return 0
+}
+
+test_fresh_worker_schema_initialization_replaces_runtime_drift() {
+	local shared_dir="${HOME}/.local/share/opencode"
+	local isolated_dir="${TEST_ROOT}/fresh-opencode-schema-drift"
+	local shared_db="${shared_dir}/opencode.db"
+	local worker_db="${isolated_dir}/opencode/opencode.db"
+	local initial_graph_matches=0 initialize_status=0 final_graph_matches=0
+	mkdir -p "$shared_dir" "${isolated_dir}/opencode"
+	rm -f "$shared_db" "$worker_db"
+
+	create_complete_opencode_test_schema "$shared_db"
+	sqlite3 "$worker_db" <<'SQL'
+CREATE TABLE project (id TEXT PRIMARY KEY, name TEXT NOT NULL);
+CREATE TABLE session (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, directory TEXT NOT NULL, title TEXT NOT NULL);
+CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, data TEXT NOT NULL);
+SQL
+	_opencode_db_graph_schema_matches "$worker_db" "$shared_db" || initial_graph_matches=1
+	_initialize_worker_db_from_shared_schema "$worker_db" "$shared_db" || initialize_status=$?
+	_opencode_db_graph_schema_matches "$worker_db" "$shared_db" || final_graph_matches=1
+
+	if [[ "$initial_graph_matches" -eq 1 && "$initialize_status" -eq 0 && "$final_graph_matches" -eq 0 ]]; then
+		print_result "fresh worker schema initialization eliminates runtime graph drift" 0
+		return 0
+	fi
+
+	print_result "fresh worker schema initialization eliminates runtime graph drift" 1 \
+		"initial_graph_matches=$initial_graph_matches initialize=$initialize_status final_graph_matches=$final_graph_matches"
+	return 0
+}
+
 test_merge_worker_db_maps_columns_by_name() {
 	local shared_dir="${HOME}/.local/share/opencode"
 	local isolated_dir="${TEST_ROOT}/merge-opencode-column-order"

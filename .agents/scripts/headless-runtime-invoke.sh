@@ -119,18 +119,16 @@ _invoke_opencode_export_isolation() {
 	fi
 	_WORKER_ISOLATED_DB_PATH="${isolated_data_dir}/opencode/opencode.db"
 	print_info "[lifecycle] db_isolated dir=$isolated_data_dir pid=$$"
-	if [[ -z "${_invoke_persisted_session:-}" ]] && ! _headless_run_is_ephemeral "$runtime_role" &&
-		[[ ! -f "$_WORKER_ISOLATED_DB_PATH" ]]; then
-		local shared_db="${HOME}/.local/share/opencode/opencode.db"
-		if [[ ! -f "$shared_db" ]] ||
-			! _initialize_worker_db_from_shared_schema "$_WORKER_ISOLATED_DB_PATH" "$shared_db"; then
-			print_error "Fresh OpenCode worker DB could not be initialized from the shared schema"
+	if ! _headless_run_is_ephemeral "$runtime_role" && [[ ! -f "$_WORKER_ISOLATED_DB_PATH" ]]; then
+		if ! _initialize_worker_db_from_shared_schema "$_WORKER_ISOLATED_DB_PATH" "${HOME}/.local/share/opencode/opencode.db"; then
+			print_error "Worker database could not initialise from the shared OpenCode schema"
 			printf '%s' "86" >"$exit_code_file"
 			return 1
 		fi
 		print_info "[lifecycle] db_schema_initialized dir=$isolated_data_dir pid=$$"
+	else
+		_sync_worker_db_migration_metadata "$isolated_data_dir"
 	fi
-	_sync_worker_db_migration_metadata "$isolated_data_dir"
 	if [[ -n "${_invoke_persisted_session:-}" ]]; then
 		if _seed_worker_db_session_context "$isolated_data_dir" "$_invoke_persisted_session" "${_invoke_work_dir:-}"; then
 			print_info "[lifecycle] db_seeded session=$_invoke_persisted_session pid=$$"
