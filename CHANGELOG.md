@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.261] - 2026-08-14
+
+### Added
+
+- add social provider health
+
+### Fixed
+
+- stop retained-lock prelaunch claim storms
+- allow headless prompt attachment reads
+- fix auto-dispatch retry on locked issues
+- fix canonical auth and signed tag recovery
+- authorize no-release aggregate recovery
+
 ## [3.32.260] - 2026-08-14
 
 ### Fixed
