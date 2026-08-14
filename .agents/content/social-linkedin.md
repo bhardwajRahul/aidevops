@@ -149,8 +149,19 @@ knowledge-social-helper.sh sync-linkedin \
   --stream authored_posts --profile personal --budget 11 --page-size 10
 ```
 
-Python 3.14.3 and the local `urllib.request` exports (`Request`, `urlopen`) were
-verified before implementation; no LinkedIn SDK was installed or imported.
+Python 3.12.3 and the local `urllib.request` exports (`Request`, `urlopen`) were
+verified before implementation; no LinkedIn SDK is installed or imported.
+
+### Approved outbound posts
+
+The outbound queue can prepare an approved text `post` for the selected member
+only. It verifies the configured member through `memberAuthorizations` before
+the write boundary, then uses the official REST Posts route. This is a
+capability-gated route: absent write-product eligibility, token scope, or exact
+member binding fails closed before mutation. The queue does not emulate a write
+through browser automation, support organization posting, or infer access from
+the read-only Member Portability product. Receipts retain only operation and
+remote post IDs; post body and authorization values remain private.
 
 ## Content Best Practices
 

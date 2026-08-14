@@ -21,9 +21,14 @@ from _knowledge_social_notifications import (
     project_notifications,
     set_notification_status,
 )
+from _knowledge_social_operation_files import (
+    OperationFileError,
+    private_media_digest,
+    read_private_body,
+    read_private_subject,
+)
 from _knowledge_social_outbound import (
     ACTIONS,
-    MAX_PAYLOAD_BYTES,
     MAX_SUBJECT_BYTES,
     ClaimedOperation,
     OperationIntent,
@@ -50,9 +55,10 @@ from _knowledge_social_outbound_runtime import (
     expire_claims,
     finalize_operation,
     mark_provider_started,
+    record_provider_checkpoint,
 )
 from knowledge_corpus_catalog import DEFAULT_ALIAS, authorized_scope
-from knowledge_corpus_context import CatalogError, validate_private_file
+from knowledge_corpus_context import CatalogError
 from knowledge_social_store import (
     SocialStoreError,
     connect,
@@ -82,55 +88,6 @@ def _clock(args: argparse.Namespace) -> int:
             raise OperationsError("test clock must be a non-negative epoch")
         return override
     return int(time.time())
-
-
-def _open_private_body(path: Path) -> tuple[int, os.stat_result]:
-    try:
-        validate_private_file(path, "outbound body", repair=False)
-        before = path.lstat()
-        flags = os.O_RDONLY
-        if hasattr(os, "O_NOFOLLOW"):
-            flags |= os.O_NOFOLLOW
-        descriptor = os.open(path, flags)
-    except (CatalogError, OSError) as error:
-        raise OperationsError("outbound body is unavailable or unsafe") from error
-    return descriptor, before
-
-
-def _read_private_bytes(descriptor: int, before: os.stat_result) -> bytes:
-    try:
-        after = os.fstat(descriptor)
-        if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
-            raise OperationsError("outbound body replacement detected")
-        with os.fdopen(descriptor, "rb") as handle:
-            descriptor = -1
-            payload = handle.read(MAX_PAYLOAD_BYTES + 1)
-    except OSError as error:
-        raise OperationsError("outbound body is unavailable or unsafe") from error
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
-    return payload
-
-
-def _read_private_body(path: Path) -> str:
-    descriptor, before = _open_private_body(path)
-    payload = _read_private_bytes(descriptor, before)
-    if len(payload) > MAX_PAYLOAD_BYTES:
-        raise OperationsError("outbound body exceeds the private payload limit")
-    try:
-        return payload.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise OperationsError("outbound body must be UTF-8") from error
-
-
-def _read_private_subject(path: Path) -> str:
-    subject = _read_private_body(path)
-    if subject.endswith("\n"):
-        subject = subject[:-1]
-        if subject.endswith("\r"):
-            subject = subject[:-1]
-    return subject
 
 
 def _managed_context(args: argparse.Namespace) -> tuple[str, Path]:
@@ -206,7 +163,13 @@ def _execute_claimed(
             database, claimed, executor_id, "authorization", args
         )
 
-    provider_remote_id, failure_class = provider.invoke()
+    if claimed.provider == "youtube":
+        checkpoint = lambda checkpoint_id: record_provider_checkpoint(
+            database, claimed, executor_id, checkpoint_id
+        )
+        provider_remote_id, failure_class = provider.invoke(checkpoint)
+    else:
+        provider_remote_id, failure_class = provider.invoke()
     if failure_class is not None:
         return _unknown_provider_outcome(
             database,
@@ -291,8 +254,11 @@ def _handle_operation_create(
     current_time: int | None,
 ) -> dict[str, Any]:
     created_at = _required_now(current_time)
-    payload = _read_private_body(args.body_file) if args.body_file else None
-    subject = _read_private_subject(args.subject_file) if args.subject_file else None
+    payload = read_private_body(args.body_file) if args.body_file else None
+    subject = read_private_subject(args.subject_file) if args.subject_file else None
+    media_path, media_sha256 = (
+        private_media_digest(args.media_file) if args.media_file else (None, None)
+    )
     if subject is not None and len(subject.encode("utf-8")) > MAX_SUBJECT_BYTES:
         raise OperationsError("outbound subject exceeds the private subject limit")
     return create_operation(
@@ -313,6 +279,8 @@ def _handle_operation_create(
             created_by=principal_id,
             destination_remote_id=args.destination_id,
             subject=subject,
+            media_path=media_path,
+            media_sha256=media_sha256,
             operation_id=args.operation_id,
             created_at=created_at,
         ),
@@ -508,6 +476,7 @@ def _add_create_command(commands: Any) -> None:
     create.add_argument("--destination-id")
     create.add_argument("--body-file", type=Path)
     create.add_argument("--subject-file", type=Path)
+    create.add_argument("--media-file", type=Path)
     create.add_argument("--app", "--profile", dest="app")
     create.add_argument("--username")
     create.add_argument("--scheduled-at", type=int)
@@ -599,6 +568,7 @@ def main() -> int:
     except (
         CatalogError,
         OSError,
+        OperationFileError,
         OperationsError,
         ProviderAdapterError,
         ProviderIdentityError,

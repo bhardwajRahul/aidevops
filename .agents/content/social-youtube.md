@@ -13,7 +13,7 @@ research tooling and is not evidence that a personal channel was selected.
 The collector uses Python's standard-library `urllib.request.Request`,
 `urllib.request.urlopen`, and `urllib.parse.urlencode` exports. It does not depend
 on or install `google-api-python-client`; the implementation was verified with
-Python 3.14.3 and validates the required exports before a live request.
+Python 3.12.3 and validates the required exports before a live request.
 
 Authorize only the documented read scope:
 
@@ -64,6 +64,20 @@ never bind a connection or persist provider evidence before account verification
 The boundary serializes only allowlisted text, IDs, timestamps, direction, count,
 position, and privacy-status fields. It never downloads audiovisual media and has
 no write endpoint or mutation action.
+
+## Approved outbound video uploads
+
+The approval-bound outbound queue can upload one reviewed private video to an
+exactly verified owned channel. It requires a named OAuth profile with the
+official `https://www.googleapis.com/auth/youtube.upload` scope, a private media
+file bound by SHA-256 before approval, a
+non-empty title (at most 100 characters), and a private description. The provider
+first calls `channels.list(mine=true)` and fails closed on a different channel or
+unready authorization. It initiates the official resumable `videos.insert`
+upload route and maps any transport ambiguity to `unknown`; executors never
+blindly create a second video. The initial implementation publishes as `private`
+only—thumbnail, captions, scheduling, and changing a video's visibility require
+separate approved capabilities. Receipts contain only operation and video IDs.
 
 ## Explicit gaps and retention
 

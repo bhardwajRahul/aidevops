@@ -13,17 +13,27 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from _knowledge_social_outbound_validation import (
+    MAX_SUBJECT_BYTES,
+    optional_selector as _optional_selector,
+    validated_destination as _validated_destination,
+    validated_media as _validated_media,
+    validated_subject as _validated_subject,
+    validated_target as _validated_target,
+)
 from knowledge_social_import import canonical_json
 from knowledge_social_store import SocialStoreError, validate_opaque
 
 ACTIONS = ("post", "reply", "like", "bookmark")
 OUTBOUND_PROVIDER_ACTIONS = {
+    "linkedin": ("post",),
     "meta_facebook": ("post", "reply"),
     "meta_instagram": ("post",),
     "meta_threads": ("post", "reply"),
     "reddit": ACTIONS,
     "tiktok": ("post",),
     "xapi": ACTIONS,
+    "youtube": ("post",),
 }
 TERMINAL_STATES = ("succeeded", "failed", "unknown", "cancelled")
 FAILURE_CLASSES = (
@@ -36,14 +46,9 @@ FAILURE_CLASSES = (
     "validation",
 )
 MAX_PAYLOAD_BYTES = 16 * 1024
-MAX_SUBJECT_BYTES = 4 * 1024
-MAX_REDDIT_SUBJECT_CHARS = 300
-MAX_SELECTOR_BYTES = 256
 MAX_APPROVAL_SECONDS = 31 * 24 * 60 * 60
-CURRENT_INTENT_VERSION = 2
-REDDIT_TARGET_ID = re.compile(r"^t[13]_[A-Za-z0-9]+$")
+CURRENT_INTENT_VERSION = 3
 REDDIT_PROFILE_NAME = re.compile(r"^[a-z0-9][a-z0-9_]{0,63}$")
-REDDIT_DESTINATION_ID = re.compile(r"^[A-Za-z0-9_]{3,21}$")
 
 
 @dataclass(frozen=True)
@@ -61,6 +66,8 @@ class OperationIntent:
     created_by: str
     destination_remote_id: str | None = None
     subject: str | None = None
+    media_path: str | None = None
+    media_sha256: str | None = None
     operation_id: str | None = None
     created_at: int | None = None
 
@@ -101,6 +108,8 @@ class ClaimedOperation:
     username: str | None
     claim_token: int
     attempt_id: str
+    media_path: str | None = None
+    media_sha256: str | None = None
 
 
 def now_epoch() -> int:
@@ -116,20 +125,6 @@ def _digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def _optional_selector(value: str | None, field: str) -> str | None:
-    if value is None:
-        return None
-    if not value:
-        raise SocialStoreError(f"{field} must be one non-empty line")
-    if value.startswith("-"):
-        raise SocialStoreError(f"{field} must not be option-shaped")
-    if any(marker in value for marker in ("\x00", "\n", "\r")):
-        raise SocialStoreError(f"{field} must be one non-empty line")
-    if len(value.encode("utf-8")) > MAX_SELECTOR_BYTES:
-        raise SocialStoreError(f"{field} is too long")
-    return value
-
-
 def _validated_payload(action: str, payload: str | None) -> str | None:
     if action in ("post", "reply"):
         if payload is None or not payload.strip() or "\x00" in payload:
@@ -140,58 +135,6 @@ def _validated_payload(action: str, payload: str | None) -> str | None:
     if payload is not None:
         raise SocialStoreError(f"{action} does not accept a body")
     return None
-
-
-def _validated_subject(provider: str, action: str, subject: str | None) -> str | None:
-    if provider == "reddit" and action == "post":
-        if subject is None or not subject.strip():
-            raise SocialStoreError("Reddit posts require a non-empty private subject file")
-        if any(marker in subject for marker in ("\x00", "\n", "\r")):
-            raise SocialStoreError("outbound subject must be one non-empty line")
-        if len(subject) > MAX_REDDIT_SUBJECT_CHARS:
-            raise SocialStoreError(
-                "Reddit post subject exceeds the 300-character title limit"
-            )
-        if len(subject.encode("utf-8")) > MAX_SUBJECT_BYTES:
-            raise SocialStoreError("outbound subject exceeds the private subject limit")
-        return subject
-    if subject is not None:
-        raise SocialStoreError("this outbound operation does not accept a subject")
-    return None
-
-
-def _validated_destination(
-    provider: str, action: str, destination: str | None
-) -> str | None:
-    if provider == "reddit" and action == "post":
-        if destination is None:
-            raise SocialStoreError("Reddit posts require a destination subreddit ID")
-        destination = validate_opaque(destination, "destination_remote_id")
-        if REDDIT_DESTINATION_ID.fullmatch(destination) is None:
-            raise SocialStoreError("Reddit destination subreddit ID is invalid")
-        return destination
-    if provider in ("meta_instagram", "tiktok") and action == "post":
-        if destination is None:
-            raise SocialStoreError(
-                "visual outbound posts require an approved opaque media reference"
-            )
-        return validate_opaque(destination, "destination_remote_id")
-    if destination is not None:
-        raise SocialStoreError("this outbound operation does not accept a destination")
-    return None
-
-
-def _validated_target(provider: str, action: str, target: str | None) -> str | None:
-    if action == "post":
-        if target is not None:
-            raise SocialStoreError("post does not accept a target")
-        return None
-    if target is None:
-        raise SocialStoreError(f"{action} requires a target post ID")
-    target = validate_opaque(target, "target_remote_id")
-    if provider == "reddit" and REDDIT_TARGET_ID.fullmatch(target) is None:
-        raise SocialStoreError("Reddit targets require a t1_ or t3_ fullname")
-    return target
 
 
 def _intent_document(values: dict[str, Any]) -> dict[str, Any]:
@@ -210,14 +153,21 @@ def _intent_document(values: dict[str, Any]) -> dict[str, Any]:
         "scheduled_at": values["scheduled_at"],
         "created_by": values["created_by"],
     }
-    if version == 2:
+    if version in (2, 3):
         document.update(
             {
                 "destination_remote_id": values["destination_remote_id"],
                 "subject_sha256": values["subject_sha256"],
             }
         )
-    elif version != 1:
+    if version == 3:
+        document.update(
+            {
+                "media_path": values["media_path"],
+                "media_sha256": values["media_sha256"],
+            }
+        )
+    elif version not in (1, 2):
         raise SocialStoreError("unsupported outbound intent version")
     return document
 
@@ -237,10 +187,18 @@ def _verify_operation_row(row: sqlite3.Row) -> sqlite3.Row:
             for field in ("destination_remote_id", "subject", "subject_sha256")
         ):
             raise SocialStoreError("legacy outbound operation has unbound provider fields")
-    elif intent_version == 2:
+    elif intent_version in (2, 3):
         subject_sha256 = _digest(row["subject"] or "")
         if subject_sha256 != row["subject_sha256"]:
             raise SocialStoreError("outbound operation subject integrity check failed")
+        if intent_version == 3 and (
+            (row["media_path"] is None) != (row["media_sha256"] is None)
+            or (
+                row["media_sha256"] is not None
+                and re.fullmatch(r"[0-9a-f]{64}", str(row["media_sha256"])) is None
+            )
+        ):
+            raise SocialStoreError("outbound operation media integrity check failed")
     else:
         raise SocialStoreError("unsupported outbound intent version")
     values = dict(row)
@@ -303,6 +261,9 @@ def _operation_values(
         if username is not None:
             raise SocialStoreError("Reddit identity is selected only by its auth profile")
     subject = _validated_subject(provider, intent.action, intent.subject)
+    media_path, media_sha256 = _validated_media(
+        provider, intent.action, intent.media_path, intent.media_sha256
+    )
     return {
         "operation_id": validate_opaque(operation_id, "operation_id"),
         "provider": provider,
@@ -319,6 +280,8 @@ def _operation_values(
         "payload_sha256": _digest(payload or ""),
         "subject": subject,
         "subject_sha256": _digest(subject or ""),
+        "media_path": media_path,
+        "media_sha256": media_sha256,
         "intent_version": CURRENT_INTENT_VERSION,
         "app_profile": app_profile,
         "username": username,
@@ -359,9 +322,9 @@ def _insert_operation(
         """INSERT INTO outbound_operations(
             operation_id,provider,connection_id,remote_account_id,action,
             target_remote_id,destination_remote_id,payload,payload_sha256,
-            subject,subject_sha256,intent_version,intent_sha256,app_profile,
+            subject,subject_sha256,media_path,media_sha256,intent_version,intent_sha256,app_profile,
             username,scheduled_at,state,created_by,created_at,updated_at)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             values["operation_id"],
             values["provider"],
@@ -374,6 +337,8 @@ def _insert_operation(
             values["payload_sha256"],
             values["subject"],
             values["subject_sha256"],
+            values["media_path"],
+            values["media_sha256"],
             values["intent_version"],
             values["intent_sha256"],
             values["app_profile"],
