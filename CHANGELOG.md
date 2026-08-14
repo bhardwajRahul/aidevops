@@ -10,6 +10,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.259] - 2026-08-14
+
+### Added
+
+- add Meta and TikTok publishing adapters (#30204)
+- bridge campaign schedules to outbound queue (#30198)
+
+### Changed
+
+- Documentation: finalize CodeFactor fix release aggregation
+- Documentation: aggregate release for CodeFactor clustering fix
+- Maintenance: pin patched nanoid
+- Documentation: aggregate release for awardsapp pulse fix
+
+### Fixed
+
+- fix conversation lock verification race
+- preserve routed review dispatch after head changes
+- prevent false CodeFactor systemic clusters
+- harden continued worker sessions and databases
+- preserve Remotion help behavior (#30194)
+- preserve awardsapp pulse worker dispatch
+- detect continued-session worker activity
+- initialize fresh worker database schema
+
 ## [3.32.258] - 2026-08-13
 
 ### Changed
