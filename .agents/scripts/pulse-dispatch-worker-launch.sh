@@ -1776,15 +1776,16 @@ _dispatch_launch_worker() {
 	local launch_prompt=""
 	launch_prompt=$(_dlw_prepare_prompt_for_launch "$issue_number" "$repo_slug" "$issue_title" "$prompt" "$zero_output_comment_metrics")
 
-	_dlw_publish_queued_ownership "$issue_number" "$repo_slug" "$self_login" "$issue_meta_json" || return $?
-
-	# t1894/t1934: Lock issue and linked PRs during worker execution.
+	# Freeze the worker-readable instruction surface before queued ownership is
+	# published. A lock failure must not create assignment/status notifications.
 	_ds_t0=$(_ds_now_ns)
 	if ! lock_issue_for_worker "$issue_number" "$repo_slug"; then
 		_ds_record "$issue_number" "$repo_slug" "lock_issue" "$_ds_t0"
 		_dlw_pre_runtime_failure "$issue_number" "$repo_slug" "conversation_lock_failed" 2 || return $?
 	fi
 	_ds_record "$issue_number" "$repo_slug" "lock_issue" "$_ds_t0"
+
+	_dlw_publish_queued_ownership "$issue_number" "$repo_slug" "$self_login" "$issue_meta_json" || return $?
 
 	_ds_t0=$(_ds_now_ns)
 	if ! worker_pid=$(_dlw_nohup_launch "$issue_number" "$repo_slug" "$dispatch_title" "$issue_title" \

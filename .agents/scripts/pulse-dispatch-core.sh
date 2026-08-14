@@ -332,6 +332,18 @@ _record_auto_dispatch_lock() {
 }
 
 #######################################
+# Return success when label policy requires the conversation to remain locked.
+# Args: comma-separated label names
+#######################################
+_auto_dispatch_lock_required() {
+	local labels_csv="$1"
+	if [[ ",$labels_csv," == *,auto-dispatch,* && ",$labels_csv," != *,no-auto-dispatch,* ]]; then
+		return 0
+	fi
+	return 1
+}
+
+#######################################
 # Reconcile conversation locks for every visible auto-dispatch issue,
 # including blocked and queued work that cannot reach the launch path yet.
 # Only markers owned by this mechanism may trigger an unlock.
@@ -346,7 +358,7 @@ reconcile_auto_dispatch_issue_locks() {
 		[[ "$issue_num" =~ ^[0-9]+$ ]] || continue
 		marker=$(_auto_dispatch_lock_marker "$issue_num" "$slug") || continue
 		labels_csv=",${labels},"
-		if [[ "$labels_csv" == *,auto-dispatch,* && "$labels_csv" != *,no-auto-dispatch,* ]]; then
+		if _auto_dispatch_lock_required "$labels"; then
 			lock_issue_for_worker "$issue_num" "$slug" || return 1
 		elif [[ -f "$marker" && "$labels_csv" != *,no-auto-dispatch,* ]]; then
 			gh issue unlock "$issue_num" --repo "$slug" >/dev/null 2>&1 || return 1
@@ -403,7 +415,7 @@ unlock_issue_after_worker() {
 	fi
 	# aidevops:trust-boundary — auto-dispatch remains authoritative across
 	# retries, so completion cleanup must not reopen its instruction surface.
-	if [[ ",$labels," == *,auto-dispatch,* && ",$labels," != *,no-auto-dispatch,* ]]; then
+	if _auto_dispatch_lock_required "$labels"; then
 		echo "[pulse-wrapper] Retained conversation lock for auto-dispatch #${issue_num} in ${slug} after worker handoff (GH#30180)" >>"$LOGFILE"
 		return 0
 	fi
@@ -1762,11 +1774,22 @@ _rollback_prelaunch_ownership() {
 	local repo_slug="$2"
 	local self_login="$3"
 	local claim_comment_id="$4"
-	local comments_endpoint="repos/${repo_slug}/issues/${issue_number}/comments"
+	local comments_endpoint="repos/${repo_slug}/issues/${issue_number}/comments?per_page=100"
+	local comments_json=""
 	local latest_claim_id=""
 
-	latest_claim_id=$(gh api "$comments_endpoint" --paginate --jq \
-		'[.[] | select((.body // "") | contains("DISPATCH_CLAIM nonce="))] | last | (.id // "")' 2>/dev/null) || return 1
+	comments_json=$(gh api "$comments_endpoint" --paginate --slurp 2>/dev/null) || return 1
+	# #aidevops:trust-boundary — anchor the rollback fence to GitHub's
+	# authenticated comment author. Body text and bare association values cannot
+	# let an external commenter supersede this runner's exact claim.
+	latest_claim_id=$(printf '%s' "$comments_json" | jq -r --arg self "$self_login" '
+		(if type == "array" and ((.[0]? | type) == "array") then add else . end)
+		| [.[] | select(
+			((.user.login // .author.login // "") | ascii_downcase) == ($self | ascii_downcase)
+			and ((.body // "") | contains("DISPATCH_CLAIM nonce="))
+		)]
+		| last | (.id // "")
+	' 2>/dev/null) || return 1
 	if [[ -z "$latest_claim_id" || "$latest_claim_id" != "$claim_comment_id" ]]; then
 		echo "[dispatch_with_dedup] Pre-launch rollback skipped for #${issue_number}: claim ${claim_comment_id} is no longer current (latest=${latest_claim_id:-unknown})" >>"$LOGFILE"
 		return 1
@@ -1794,18 +1817,28 @@ _rollback_prelaunch_ownership() {
 
 	issue_meta_json=$(gh_issue_view "$issue_number" --repo "$repo_slug" \
 		--json state,labels,assignees,locked 2>/dev/null) || return 1
+	local final_labels=""
+	final_labels=$(printf '%s' "$issue_meta_json" | jq -r '[.labels[]?.name] | join(",")' 2>/dev/null) || return 1
+	local expected_locked=false
+	local lock_summary="issue unlocked"
+	if _auto_dispatch_lock_required "$final_labels"; then
+		expected_locked=true
+		lock_summary="required conversation lock retained"
+	fi
 	if ! printf '%s' "$issue_meta_json" | jq -e --arg self "$self_login" '
 		.state == "OPEN" and
 		(([.labels[].name] | index("status:queued")) == null) and
 		(([.labels[].name] | index("status:available")) != null) and
-		(([.assignees[].login] | index($self)) == null) and
-		(.locked != true)
+		(([.assignees[].login] | index($self)) == null)
+	' >/dev/null 2>&1 ||
+		! printf '%s' "$issue_meta_json" | jq -e --argjson expected_locked "$expected_locked" '
+		.locked == $expected_locked
 	' >/dev/null 2>&1; then
 		echo "[dispatch_with_dedup] Pre-launch rollback verification failed for #${issue_number}; retaining claim for stale recovery" >>"$LOGFILE"
 		return 1
 	fi
 
-	echo "[dispatch_with_dedup] Pre-launch rollback verified for #${issue_number}: queued ownership removed and issue unlocked" >>"$LOGFILE"
+	echo "[dispatch_with_dedup] Pre-launch rollback verified for #${issue_number}: queued ownership removed and ${lock_summary}" >>"$LOGFILE"
 	return 0
 }
 

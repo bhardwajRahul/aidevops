@@ -754,8 +754,8 @@ lock_issue_for_worker() {
 }
 _dlw_post_launch_hooks() { return 0; }
 
-# Assignment failure occurs after deterministic gates and prompt preparation,
-# but still before the issue lock and runtime spawn.
+# Assignment failure occurs after deterministic gates, prompt preparation, and
+# verified issue locking, but still before runtime spawn.
 : >"$ORCHESTRATOR_CALLS_FILE"
 : >"${TMP}/setsid-calls.txt"
 STUB_ASSIGN_RC=1
@@ -769,10 +769,10 @@ else
 	fail "assignment failure returns explicit no-op rc=2" "got rc=$assignment_failure_rc"
 fi
 actual_calls=$(tr '\n' ' ' <"$ORCHESTRATOR_CALLS_FILE")
-if [[ "$actual_calls" == "hold precreate final-gates prompt ownership-guard assign " && ! -s "${TMP}/setsid-calls.txt" ]]; then
-	pass "assignment failure occurs at final boundary before lock and spawn"
+if [[ "$actual_calls" == "hold precreate final-gates prompt lock ownership-guard assign " && ! -s "${TMP}/setsid-calls.txt" ]]; then
+	pass "assignment failure occurs after lock verification and before spawn"
 else
-	fail "assignment failure occurs at final boundary before lock and spawn" "calls='$actual_calls'"
+	fail "assignment failure occurs after lock verification and before spawn" "calls='$actual_calls'"
 fi
 STUB_ASSIGN_RC=0
 
@@ -784,10 +784,10 @@ lock_failure_rc=0
 _dispatch_launch_worker "77781" "owner/repo" "test-dispatch" "Test Issue" \
 	"testuser" "$FAKE_REPO" "test prompt" "session-key-lock-failure" "" "{}" || lock_failure_rc=$?
 actual_calls=$(tr '\n' ' ' <"$ORCHESTRATOR_CALLS_FILE")
-if [[ "$lock_failure_rc" -eq 2 && "$actual_calls" == *"lock "* && ! -s "${TMP}/setsid-calls.txt" ]]; then
-	pass "conversation-lock failure blocks worker spawn"
+if [[ "$lock_failure_rc" -eq 2 && "$actual_calls" == "hold precreate final-gates prompt lock " && ! -s "${TMP}/setsid-calls.txt" ]]; then
+	pass "conversation-lock failure blocks ownership mutation and worker spawn"
 else
-	fail "conversation-lock failure blocks worker spawn" "rc=$lock_failure_rc calls='$actual_calls'"
+	fail "conversation-lock failure blocks ownership mutation and worker spawn" "rc=$lock_failure_rc calls='$actual_calls'"
 fi
 STUB_LOCK_RC=0
 
@@ -868,7 +868,8 @@ fi
 STUB_FINAL_GATES_RC=0
 
 # An interactive takeover after worktree precreation must stop before queued
-# assignment, issue lock, or runtime spawn, without removing the worktree.
+# assignment or runtime spawn, without removing the worktree. The issue is
+# already frozen before the final ownership guard reads it.
 : >"$ORCHESTRATOR_CALLS_FILE"
 : >"${TMP}/setsid-calls.txt"
 STUB_FINAL_OWNERSHIP_RC=1
@@ -876,11 +877,11 @@ ownership_fence_rc=0
 _dispatch_launch_worker "77783" "owner/repo" "test-dispatch" "Test Issue" \
 	"testuser" "$FAKE_REPO" "test prompt" "session-key-ownership-fence" "" "{}" || ownership_fence_rc=$?
 actual_calls=$(tr '\n' ' ' <"$ORCHESTRATOR_CALLS_FILE")
-if [[ "$ownership_fence_rc" -eq 2 && "$actual_calls" == "hold precreate final-gates prompt ownership-guard " && \
+if [[ "$ownership_fence_rc" -eq 2 && "$actual_calls" == "hold precreate final-gates prompt lock ownership-guard " && \
 	! -s "${TMP}/setsid-calls.txt" && -d "$ORCHESTRATOR_WORKTREE" ]]; then
-	pass "final ownership fence preserves worktree and blocks assignment, lock, and spawn"
+	pass "final ownership fence preserves worktree and blocks assignment and spawn"
 else
-	fail "final ownership fence preserves worktree and blocks assignment, lock, and spawn" \
+	fail "final ownership fence preserves worktree and blocks assignment and spawn" \
 		"rc=$ownership_fence_rc calls='$actual_calls' worktree=$([[ -d "$ORCHESTRATOR_WORKTREE" ]] && printf present || printf missing)"
 fi
 if [[ "${_DLW_LAST_PRE_RUNTIME_FAILURE:-}" == "final_ownership_fence" ]]; then
@@ -897,7 +898,7 @@ success_rc=0
 _dispatch_launch_worker "77782" "owner/repo" "test-dispatch" "Test Issue" \
 	"testuser" "$FAKE_REPO" "test prompt" "session-key-success" "" "{}" || success_rc=$?
 actual_calls=$(tr '\n' ' ' <"$ORCHESTRATOR_CALLS_FILE")
-if [[ "$success_rc" -eq 0 && "$actual_calls" == "hold precreate final-gates prompt ownership-guard assign lock spawn " && -s "${TMP}/setsid-calls.txt" ]]; then
+if [[ "$success_rc" -eq 0 && "$actual_calls" == "hold precreate final-gates prompt lock ownership-guard assign spawn " && -s "${TMP}/setsid-calls.txt" ]]; then
 	pass "successful launch acquires queued ownership at final boundary"
 else
 	fail "successful launch acquires queued ownership at final boundary" "rc=$success_rc calls='$actual_calls'"

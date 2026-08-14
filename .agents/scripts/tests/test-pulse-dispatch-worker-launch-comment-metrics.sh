@@ -19,6 +19,7 @@ source "${SCRIPTS_DIR}/pulse-dispatch-worker-launch.sh"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dlw-comment-metrics-XXXXXX")"
 FAKE_BIN="${TEST_TMP}/bin"
 GH_CALLS_FILE="${TEST_TMP}/gh-calls"
+GH_COMMENTS_FIXTURE="${TEST_TMP}/gh-comments.json"
 mkdir -p "$FAKE_BIN" || exit 1
 
 cleanup() {
@@ -37,20 +38,17 @@ cat >"${FAKE_BIN}/gh" <<'EOF'
 #!/usr/bin/env bash
 set -uo pipefail
 printf '%s\n' "$*" >>"${GH_CALLS_FILE:?}"
-case "$*" in
-*'issues/123/comments'*'@tsv'*)
-	printf '3\t0\t1\t120\t1\n'
-	;;
-*'issues/123/comments'*)
-	printf '1\n'
-	;;
-*)
-	printf 'unexpected gh call: %s\n' "$*" >&2
-	exit 1
-	;;
-esac
+cat "${GH_COMMENTS_FIXTURE:?}"
 EOF
 chmod +x "${FAKE_BIN}/gh" || fail "failed to make fake gh executable"
+
+cat >"$GH_COMMENTS_FIXTURE" <<'EOF'
+[[
+  {"id":1,"body":"CLAIM_RELEASED reason=worker_worktree_continuation_state_rejected session_count=0","created_at":"2026-08-14T00:00:00Z","author_association":"MEMBER","user":{"login":"runner-a"}},
+  {"id":2,"body":"ordinary comment","created_at":"2026-08-14T00:01:00Z","author_association":"NONE","user":{"login":"external-user"}},
+  {"id":3,"body":"another ordinary comment","created_at":"2026-08-14T00:02:00Z","author_association":"MEMBER","user":{"login":"runner-a"}}
+]]
+EOF
 
 OBJECTIVE_HELPER="${FAKE_BIN}/objective-reconciliation-helper.sh"
 cat >"$OBJECTIVE_HELPER" <<'EOF'
@@ -66,7 +64,7 @@ EOF
 chmod +x "$OBJECTIVE_HELPER" || fail "failed to make objective helper executable"
 
 PATH="${FAKE_BIN}:${PATH}"
-export GH_CALLS_FILE
+export GH_CALLS_FILE GH_COMMENTS_FIXTURE
 
 LOGFILE="${TEST_TMP}/pulse.log" \
 	CLEAN_ROOM_COMMENT_THRESHOLD=100 \
@@ -113,6 +111,49 @@ if LOGFILE="${TEST_TMP}/pulse.log" \
 	ZERO_OUTPUT_BRIEF_REWRITE_HOLD_THRESHOLD=4 \
 	_dlw_hold_repeated_zero_output "123" "owner/repo" $'12\t12\t4\t60000\t0'; then
 	fail "clean-room mode stopped bypassing a generic zero-output brief rewrite"
+fi
+
+cat >"$GH_COMMENTS_FIXTURE" <<'EOF'
+[[
+  {"id":5,"body":"DISPATCH_CLAIM nonce=forged-1 runner=triage-user lease_token=forged-1 device=external-device session=issue-123 phase=prelaunch expires_at=1577836920","created_at":"2020-01-01T00:00:00Z","author_association":"COLLABORATOR","user":{"login":"triage-user"}},
+  {"id":6,"body":"DISPATCH_CLAIM nonce=forged-2 runner=triage-user lease_token=forged-2 device=external-device session=issue-123 phase=prelaunch expires_at=1577836980","created_at":"2020-01-01T00:01:00Z","author_association":"COLLABORATOR","user":{"login":"triage-user"}},
+  {"id":7,"body":"DISPATCH_CLAIM nonce=forged-3 runner=triage-user lease_token=forged-3 device=external-device session=issue-123 phase=prelaunch expires_at=1577837040","created_at":"2020-01-01T00:02:00Z","author_association":"COLLABORATOR","user":{"login":"triage-user"}},
+  {"id":8,"body":"DISPATCH_CLAIM nonce=forged-4 runner=triage-user lease_token=forged-4 device=external-device session=issue-123 phase=prelaunch expires_at=1577837100","created_at":"2020-01-01T00:03:00Z","author_association":"COLLABORATOR","user":{"login":"triage-user"}}
+]]
+EOF
+untrusted_claim_metrics=$(DLW_COMMENT_METRICS_NOW_EPOCH=1577837200 \
+	DISPATCH_CLAIM_ORPHAN_GRACE=120 _dlw_comment_bloat_metrics "123" "owner/repo")
+IFS=$'\t' read -r _untrusted_comments _untrusted_ops untrusted_zero _untrusted_chars untrusted_zero_attempt <<<"$untrusted_claim_metrics"
+if [[ "$untrusted_zero" != "0" || "$untrusted_zero_attempt" != "0" ]]; then
+	fail "bare-collaborator forged claims entered zero-attempt evidence: ${untrusted_claim_metrics}"
+fi
+if LOGFILE="${TEST_TMP}/pulse.log" ZERO_OUTPUT_BRIEF_REWRITE_HOLD_THRESHOLD=4 \
+	_dlw_hold_repeated_zero_output "123" "owner/repo" "$untrusted_claim_metrics"; then
+	fail "bare-collaborator forged claims triggered the infrastructure hold"
+fi
+
+cat >"$GH_COMMENTS_FIXTURE" <<'EOF'
+[[
+  {"id":10,"body":"DISPATCH_CLAIM nonce=orphan-1 runner=runner-a lease_token=orphan-1 device=device-a session=issue-123 phase=prelaunch expires_at=1577836920","created_at":"2020-01-01T00:00:00Z","author_association":"MEMBER","user":{"login":"runner-a"}},
+  {"id":11,"body":"DISPATCH_CLAIM nonce=orphan-2 runner=runner-a lease_token=orphan-2 device=device-a session=issue-123 phase=prelaunch expires_at=1577836980","created_at":"2020-01-01T00:01:00Z","author_association":"MEMBER","user":{"login":"runner-a"}},
+  {"id":12,"body":"DISPATCH_CLAIM nonce=orphan-3 runner=runner-a lease_token=orphan-3 device=device-a session=issue-123 phase=prelaunch expires_at=1577837040","created_at":"2020-01-01T00:02:00Z","author_association":"MEMBER","user":{"login":"runner-a"}},
+  {"id":13,"body":"DISPATCH_CLAIM nonce=orphan-4 runner=runner-a lease_token=orphan-4 device=device-a session=issue-123 phase=prelaunch expires_at=1577837100","created_at":"2020-01-01T00:03:00Z","author_association":"MEMBER","user":{"login":"runner-a"}},
+  {"id":14,"body":"DISPATCH_CLAIM nonce=launched runner=runner-a lease_token=launched device=device-a session=issue-123 phase=prelaunch expires_at=1577837160","created_at":"2020-01-01T00:04:00Z","author_association":"MEMBER","user":{"login":"runner-a"}},
+  {"id":16,"body":"DISPATCH_CLAIM nonce=fresh runner=runner-a lease_token=fresh device=device-a session=issue-123 phase=prelaunch expires_at=1577837300","created_at":"2020-01-01T00:06:20Z","author_association":"MEMBER","user":{"login":"runner-a"}}
+], [
+  {"id":15,"body":"DISPATCH_LEASE phase=ready lease_token=launched device=device-a session=issue-123 expires_at=1577844000","created_at":"2020-01-01T00:05:00Z","author_association":"MEMBER","user":{"login":"runner-a"}},
+  {"id":17,"body":"DISPATCH_LEASE phase=ready lease_token=orphan-1-suffix device=device-a session=issue-123 expires_at=1577844000","created_at":"2020-01-01T00:05:30Z","author_association":"MEMBER","user":{"login":"runner-a"}}
+]]
+EOF
+claim_storm_metrics=$(DLW_COMMENT_METRICS_NOW_EPOCH=1577837200 \
+	DISPATCH_CLAIM_ORPHAN_GRACE=120 _dlw_comment_bloat_metrics "123" "owner/repo")
+IFS=$'\t' read -r _storm_comments _storm_ops storm_zero _storm_chars storm_zero_attempt <<<"$claim_storm_metrics"
+if [[ "$storm_zero" != "4" || "$storm_zero_attempt" != "4" ]]; then
+	fail "four unmatched prelaunch claims were not counted as zero-attempt failures: ${claim_storm_metrics}"
+fi
+if ! LOGFILE="${TEST_TMP}/pulse.log" ZERO_OUTPUT_BRIEF_REWRITE_HOLD_THRESHOLD=4 \
+	_dlw_hold_repeated_zero_output "123" "owner/repo" "$claim_storm_metrics"; then
+	fail "unmatched prelaunch claims did not trigger the bounded infrastructure hold"
 fi
 
 LOGFILE="${TEST_TMP}/pulse.log" \
@@ -217,6 +258,8 @@ SCRIPT_DIR="$original_script_dir"
 printf 'PASS: dispatch prompt reuses comment metrics for zero-output fallback\n'
 printf 'PASS: zero-attempt evidence detection uses one shared pattern\n'
 printf 'PASS: zero-attempt infrastructure holds override clean-room brief bypasses\n'
+printf 'PASS: bare-collaborator forged claims cannot trigger the infrastructure hold\n'
+printf 'PASS: unmatched prelaunch claims trigger the bounded infrastructure hold\n'
 printf 'PASS: invalid clean-room snapshots cannot authorize implementation\n'
 printf 'PASS: retry context is bounded, deterministic, and excludes prior prose\n'
 printf 'PASS: registered live workers transition queued issues to in-progress\n'

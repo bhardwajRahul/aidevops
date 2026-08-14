@@ -175,10 +175,13 @@ gh() {
 		shift || true
 		case "$sub" in
 		comment)
-			# Capture the --body for assertions.
+			# Capture either inline or wrapper-normalized body-file content.
 			while [[ $# -gt 0 ]]; do
 				if [[ "$1" == "--body" ]]; then
 					printf '%s\n---END_COMMENT---\n' "$2" >>"$GH_COMMENT_LOG"
+					shift 2
+				elif [[ "$1" == "--body-file" && -f "${2:-}" ]]; then
+					printf '%s\n---END_COMMENT---\n' "$(<"$2")" >>"$GH_COMMENT_LOG"
 					shift 2
 				else
 					shift
@@ -193,6 +196,26 @@ gh() {
 		;;
 	*) ;;
 	esac
+	return 0
+}
+
+# Keep this lifecycle test focused on idempotency rather than the independent
+# signature/body-file transport wrapper exercised by its own test suite.
+gh_issue_comment() {
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--body)
+			printf '%s\n---END_COMMENT---\n' "$2" >>"$GH_COMMENT_LOG"
+			shift 2
+			;;
+		--body-file)
+			[[ -f "${2:-}" ]] || return 1
+			printf '%s\n---END_COMMENT---\n' "$(<"$2")" >>"$GH_COMMENT_LOG"
+			shift 2
+			;;
+		*) shift ;;
+		esac
+	done
 	return 0
 }
 
@@ -228,13 +251,18 @@ sleep() {
 }
 
 STATUS_MUTATION_FAIL=0
+RETAIN_AUTO_DISPATCH_LOCK=0
 set_issue_status() {
 	local issue_number="$1"
 	local repo_slug="$2"
 	local status_name="$3"
 	: "$issue_number" "$repo_slug" "$status_name"
 	[[ "$STATUS_MUTATION_FAIL" -eq 0 ]] || return 1
-	printf '{"state":"OPEN","labels":[{"name":"status:available"}],"assignees":[],"locked":false}' >"$GH_ISSUE_RESPONSE"
+	if [[ "$RETAIN_AUTO_DISPATCH_LOCK" -eq 1 ]]; then
+		printf '{"state":"OPEN","labels":[{"name":"auto-dispatch"},{"name":"status:available"}],"assignees":[],"locked":true}' >"$GH_ISSUE_RESPONSE"
+	else
+		printf '{"state":"OPEN","labels":[{"name":"status:available"}],"assignees":[],"locked":false}' >"$GH_ISSUE_RESPONSE"
+	fi
 	return 0
 }
 
@@ -340,15 +368,16 @@ fi
 
 reset_gh_state
 _claim_comment_id="claim-123"
-printf '[{"id":"claim-123","body":"DISPATCH_CLAIM nonce=test runner=runner-a"}]' >"$GH_API_COMMENTS_RESPONSE"
-printf '{"state":"OPEN","labels":[{"name":"status:queued"}],"assignees":[{"login":"runner-a"}],"locked":true}' >"$GH_ISSUE_RESPONSE"
+printf '[{"id":"claim-123","body":"DISPATCH_CLAIM nonce=test runner=runner-a","author_association":"MEMBER","user":{"login":"runner-a"}}]' >"$GH_API_COMMENTS_RESPONSE"
+printf '{"state":"OPEN","labels":[{"name":"auto-dispatch"},{"name":"status:queued"}],"assignees":[{"login":"runner-a"}],"locked":true}' >"$GH_ISSUE_RESPONSE"
+RETAIN_AUTO_DISPATCH_LOCK=1
 _release_dispatch_claim_on_abort "12345" "owner/repo" "runner-a" "worker_launch_rc_2"
 count_abort_release=$(count_gh_comments)
 if [[ "$count_abort_release" -eq 0 ]] &&
 	grep -q '^DELETE_COMMENT$' "$GH_COMMENT_LOG"; then
-	print_result "Fix C: pre-launch abort deletes retained claim" 0
+	print_result "Fix C: pre-launch abort deletes claim while retaining required lock" 0
 else
-	print_result "Fix C: pre-launch abort deletes retained claim" 1 "log: $(cat "$GH_COMMENT_LOG")"
+	print_result "Fix C: pre-launch abort deletes claim while retaining required lock" 1 "log: $(cat "$GH_COMMENT_LOG")"
 fi
 
 if [[ -z "${_claim_comment_id:-}" ]]; then
@@ -357,15 +386,52 @@ else
 	print_result "Fix C: release helper clears retained claim id" 1 "claim id still set: ${_claim_comment_id}"
 fi
 
-if grep -q 'Pre-launch rollback verified' "$LOGFILE"; then
-	print_result "Fix C: pre-launch abort verifies queued ownership rollback" 0
+if grep -q 'Pre-launch rollback verified.*required conversation lock retained' "$LOGFILE"; then
+	print_result "Fix C: pre-launch abort verifies retained-lock ownership rollback" 0
 else
-	print_result "Fix C: pre-launch abort verifies queued ownership rollback" 1 "log: $(cat "$LOGFILE")"
+	print_result "Fix C: pre-launch abort verifies retained-lock ownership rollback" 1 "log: $(cat "$LOGFILE")"
 fi
 
 reset_gh_state
+_claim_comment_id="claim-unlocked"
+printf '[{"id":"claim-unlocked","body":"DISPATCH_CLAIM nonce=unlocked runner=runner-a","author_association":"MEMBER","user":{"login":"runner-a"}}]' >"$GH_API_COMMENTS_RESPONSE"
+printf '{"state":"OPEN","labels":[{"name":"status:queued"}],"assignees":[{"login":"runner-a"}],"locked":true}' >"$GH_ISSUE_RESPONSE"
+RETAIN_AUTO_DISPATCH_LOCK=0
+_release_dispatch_claim_on_abort "12345" "owner/repo" "runner-a" "worker_launch_rc_2"
+if grep -q '^DELETE_COMMENT$' "$GH_COMMENT_LOG" &&
+	jq -e '.locked == false' "$GH_ISSUE_RESPONSE" >/dev/null; then
+	print_result "Fix C: ordinary pre-launch rollback still requires an unlocked issue" 0
+else
+	print_result "Fix C: ordinary pre-launch rollback still requires an unlocked issue" 1 "state: $(cat "$GH_ISSUE_RESPONSE")"
+fi
+
+reset_gh_state
+_claim_comment_id="claim-paged"
+printf '[[{"id":"claim-page-1","body":"DISPATCH_CLAIM nonce=old runner=runner-a","author_association":"MEMBER","user":{"login":"runner-a"}}],[{"id":"claim-paged","body":"DISPATCH_CLAIM nonce=current runner=runner-a","author_association":"MEMBER","user":{"login":"runner-a"}},{"id":"claim-forged","body":"DISPATCH_CLAIM nonce=forged runner=runner-a","author_association":"NONE","user":{"login":"external-user"}}]]' >"$GH_API_COMMENTS_RESPONSE"
+printf '{"state":"OPEN","labels":[{"name":"auto-dispatch"},{"name":"status:queued"}],"assignees":[{"login":"runner-a"}],"locked":true}' >"$GH_ISSUE_RESPONSE"
+RETAIN_AUTO_DISPATCH_LOCK=1
+_release_dispatch_claim_on_abort "12345" "owner/repo" "runner-a" "worker_launch_rc_2"
+if grep -q '^DELETE_COMMENT$' "$GH_COMMENT_LOG"; then
+	print_result "Fix C: paginated rollback ignores forged external claims and deletes its exact claim" 0
+else
+	print_result "Fix C: paginated rollback ignores forged external claims and deletes its exact claim" 1 "log: $(cat "$GH_COMMENT_LOG")"
+fi
+
+reset_gh_state
+_claim_comment_id="claim-before-assignment"
+printf '[{"id":"claim-before-assignment","body":"DISPATCH_CLAIM nonce=preassign runner=runner-a","author_association":"MEMBER","user":{"login":"runner-a"}}]' >"$GH_API_COMMENTS_RESPONSE"
+printf '{"state":"OPEN","labels":[{"name":"auto-dispatch"},{"name":"status:available"}],"assignees":[],"locked":true}' >"$GH_ISSUE_RESPONSE"
+_release_dispatch_claim_on_abort "12345" "owner/repo" "runner-a" "worker_launch_rc_2"
+if grep -q '^DELETE_COMMENT$' "$GH_COMMENT_LOG" && jq -e '.locked == true' "$GH_ISSUE_RESPONSE" >/dev/null; then
+	print_result "Fix C: pre-assignment abort deletes its claim without reopening instructions" 0
+else
+	print_result "Fix C: pre-assignment abort deletes its claim without reopening instructions" 1 "state: $(cat "$GH_ISSUE_RESPONSE")"
+fi
+RETAIN_AUTO_DISPATCH_LOCK=0
+
+reset_gh_state
 _claim_comment_id="claim-old"
-printf '[{"id":"claim-old","body":"DISPATCH_CLAIM nonce=old runner=runner-a"},{"id":"claim-new","body":"DISPATCH_CLAIM nonce=new runner=runner-a"}]' >"$GH_API_COMMENTS_RESPONSE"
+printf '[{"id":"claim-old","body":"DISPATCH_CLAIM nonce=old runner=runner-a","author_association":"MEMBER","user":{"login":"runner-a"}},{"id":"claim-new","body":"DISPATCH_CLAIM nonce=new runner=runner-a","author_association":"MEMBER","user":{"login":"runner-a"}}]' >"$GH_API_COMMENTS_RESPONSE"
 printf '{"state":"OPEN","labels":[{"name":"status:queued"}],"assignees":[{"login":"runner-a"}],"locked":true}' >"$GH_ISSUE_RESPONSE"
 if _release_dispatch_claim_on_abort "12345" "owner/repo" "runner-a" "worker_launch_rc_2"; then
 	print_result "Fix C: older abort cannot clear a newer claim" 1 "rollback unexpectedly succeeded"
@@ -380,7 +446,7 @@ fi
 
 reset_gh_state
 _claim_comment_id="claim-failed-mutation"
-printf '[{"id":"claim-failed-mutation","body":"DISPATCH_CLAIM nonce=failed runner=runner-a"}]' >"$GH_API_COMMENTS_RESPONSE"
+printf '[{"id":"claim-failed-mutation","body":"DISPATCH_CLAIM nonce=failed runner=runner-a","author_association":"MEMBER","user":{"login":"runner-a"}}]' >"$GH_API_COMMENTS_RESPONSE"
 printf '{"state":"OPEN","labels":[{"name":"status:queued"}],"assignees":[{"login":"runner-a"}],"locked":true}' >"$GH_ISSUE_RESPONSE"
 STATUS_MUTATION_FAIL=1
 if _release_dispatch_claim_on_abort "12345" "owner/repo" "runner-a" "worker_launch_rc_2"; then
