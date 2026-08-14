@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.262] - 2026-08-14
+
+### Changed
+
+- Documentation: stage refreshed v3.32.262 aggregation
+- Documentation: add source-level external-tool evaluation guidance (#30240)
+- Documentation: stage v3.32.262 release aggregation
+
+### Fixed
+
+- Fix snapshot linked-worktree classification
+- isolate cross-repo summary stderr files (#30234)
+- reconcile authorized direct no-release receipts
+
 ## [3.32.261] - 2026-08-14
 
 ### Added
