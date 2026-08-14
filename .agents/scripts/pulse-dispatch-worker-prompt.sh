@@ -75,13 +75,89 @@ _dlw_zero_output_comment_count() {
 	[[ -n "$repo_slug" ]] || { printf '0'; return 0; }
 
 	local count=""
+	# #aidevops:trust-boundary — bare COLLABORATOR is ambiguous (read/triage
+	# access also receives it). This pure comment scan cannot perform the required
+	# permission lookup, so only authoritative OWNER/MEMBER evidence may fuse.
 	# shellcheck disable=SC2016  # jq program is intentionally single-quoted.
 	count=$(gh api --paginate "repos/${repo_slug}/issues/${issue_number}/comments?per_page=100" \
-		--jq '[.[] | select((.body // "") | test("'"${zero_output_pattern}"'"; "i"))] | length' 2>/dev/null | \
+		--jq 'def authoritative_association: (.author_association // "") as $a | ["OWNER", "MEMBER"] | index($a) != null; [.[] | select(authoritative_association and ((.body // "") | test("'"${zero_output_pattern}"'"; "i")))] | length' 2>/dev/null | \
 		awk '{ if ($1 ~ /^[0-9]+$/) { total += $1 } } END { printf "%d", total + 0 }') || count=0
 	[[ "$count" =~ ^[0-9]+$ ]] || count=0
 	printf '%s' "$count"
 	return 0
+}
+
+#######################################
+# Compute comment-bloat metrics from one normalized or paginated comment JSON
+# snapshot. Claims older than the prelaunch grace with no authenticated ready
+# transition are zero-attempt infrastructure evidence.
+# Args: raw comments JSON, now epoch, orphan grace, zero-output regex,
+#       zero-attempt regex
+# Output: comments, ops, zero, chars, zero-attempt as a TSV row
+#######################################
+_dlw_comment_bloat_metrics_from_json() {
+	local raw_comments="$1"
+	local now_epoch="$2"
+	local orphan_grace="$3"
+	local zero_output_pattern="$4"
+	local zero_attempt_pattern="$5"
+
+	printf '%s' "$raw_comments" | jq -r \
+		--argjson now_epoch "$now_epoch" \
+		--argjson orphan_grace "$orphan_grace" \
+		--arg zero_output_pattern "$zero_output_pattern" \
+		--arg zero_attempt_pattern "$zero_attempt_pattern" '
+		def comments:
+			if type != "array" then []
+			elif length == 0 then []
+			elif all(.[]; type == "array") then add
+			else .
+			end;
+		def body_text: .body // "";
+		def marker_value($name):
+			try (body_text | capture($name + "=(?<value>[^ ]+)").value) catch "";
+		# Bare COLLABORATOR cannot authorize evidence without a permission lookup.
+		def authoritative_association:
+			(.author_association // "") as $association
+			| ["OWNER", "MEMBER"] | index($association) != null;
+		comments as $comments |
+		([$comments[] | select(body_text | test("ops:start|DISPATCH_CLAIM|CLAIM_RELEASED|dispatch-cooldown|Worker Watchdog Kill"; "i"))] | length) as $ops |
+		([$comments[] | select(authoritative_association and (body_text | test($zero_output_pattern; "i")))] | length) as $explicit_zero |
+		([$comments[] | select(authoritative_association and (body_text | test($zero_attempt_pattern; "i")) and (body_text | test("session_count=0"; "i")))] | length) as $explicit_zero_attempt |
+		([$comments[]
+			| select(authoritative_association)
+			| select(body_text | test("DISPATCH_CLAIM nonce="; "i"))
+			| select(body_text | contains("lease_token="))
+			| . as $claim
+			| ($claim | marker_value("lease_token")) as $token
+			| ($claim | marker_value("runner")) as $claim_runner
+			| ($claim | marker_value("device")) as $claim_device
+			| ($claim | marker_value("session")) as $claim_session
+			| (($claim.user.login // $claim.author // "")) as $claim_author
+			| ((try (($claim.created_at // "") | fromdateiso8601) catch 0) // 0) as $claim_epoch
+			| select($token != "" and $claim_author != "" and $claim_author == $claim_runner)
+			| select($claim_device != "" and $claim_session != "")
+			| select($claim_epoch > 0 and ($now_epoch - $claim_epoch) >= $orphan_grace)
+			| select([
+				$comments[]
+				| select(authoritative_association)
+				| select(body_text | test("DISPATCH_LEASE phase=ready"; "i"))
+				| select(marker_value("lease_token") == $token)
+				| select((.user.login // .author // "") == $claim_author)
+				| select(marker_value("device") == $claim_device)
+				| select(marker_value("session") == $claim_session)
+				| select([(.created_at // ""), ((.id | tonumber?) // 0)] >= [($claim.created_at // ""), (($claim.id | tonumber?) // 0)])
+			] | length == 0)
+		] | length) as $unmatched_claims |
+		[
+			($comments | length),
+			$ops,
+			($explicit_zero + $unmatched_claims),
+			([$comments[] | (body_text | length)] | add // 0),
+			($explicit_zero_attempt + $unmatched_claims)
+		] | @tsv
+	' 2>/dev/null
+	return $?
 }
 
 _dlw_comment_bloat_metrics() {
@@ -94,11 +170,19 @@ _dlw_comment_bloat_metrics() {
 	[[ "$issue_number" =~ ^[0-9]+$ ]] || { printf '0\t0\t0\t0\t0'; return 0; }
 	[[ -n "$repo_slug" ]] || { printf '0\t0\t0\t0\t0'; return 0; }
 
+	local orphan_grace="${DISPATCH_CLAIM_ORPHAN_GRACE:-120}"
+	local now_epoch="${DLW_COMMENT_METRICS_NOW_EPOCH:-}"
+	local raw_comments=""
 	local metrics=""
-	# shellcheck disable=SC2016  # jq program is intentionally single-quoted.
-	metrics=$(gh api --paginate "repos/${repo_slug}/issues/${issue_number}/comments?per_page=100" \
-		--jq '[.[] | {body: (.body // "")}] | {comments: length, ops: ([.[] | select(.body | test("ops:start|DISPATCH_CLAIM|CLAIM_RELEASED|dispatch-cooldown|Worker Watchdog Kill"; "i"))] | length), zero: ([.[] | select(.body | test("'"${zero_output_pattern}"'"; "i"))] | length), chars: ([.[].body | length] | add // 0), zero_attempt: ([.[] | select((.body | test("'"${zero_attempt_pattern}"'"; "i")) and (.body | test("session_count=0"; "i")))] | length)} | [.comments, .ops, .zero, .chars, .zero_attempt] | @tsv' \
-		2>/dev/null | awk -F '\t' '{c+=$1; o+=$2; z+=$3; ch+=$4; za+=$5} END {printf "%d\t%d\t%d\t%d\t%d", c+0, o+0, z+0, ch+0, za+0}') || metrics="0	0	0	0	0"
+	[[ "$orphan_grace" =~ ^[0-9]+$ ]] || orphan_grace=120
+	[[ "$orphan_grace" -le 3600 ]] || orphan_grace=120
+	if [[ ! "$now_epoch" =~ ^[0-9]+$ ]]; then
+		now_epoch=$(date -u '+%s' 2>/dev/null || printf '0')
+	fi
+	raw_comments=$(gh api --paginate --slurp \
+		"repos/${repo_slug}/issues/${issue_number}/comments?per_page=100" 2>/dev/null) || raw_comments="[]"
+	metrics=$(_dlw_comment_bloat_metrics_from_json "$raw_comments" "$now_epoch" "$orphan_grace" \
+		"$zero_output_pattern" "$zero_attempt_pattern") || metrics=$'0\t0\t0\t0\t0'
 	[[ -n "$metrics" ]] || metrics=$'0\t0\t0\t0\t0'
 	printf '%s' "$metrics"
 	return 0

@@ -44,11 +44,13 @@ GH_LOCKED=true
 GH_LOCK_RC=0
 GH_API_RC=0
 gh() {
+	local command="${1:-}"
+	local subcommand="${2:-}"
 	printf '%s\n' "$*" >>"$GH_CALLS"
-	if [[ "$1" == "issue" && "$2" == "lock" ]]; then
+	if [[ "$command" == "issue" && "$subcommand" == "lock" ]]; then
 		return "$GH_LOCK_RC"
 	fi
-	if [[ "$1" == "api" ]]; then
+	if [[ "$command" == "api" ]]; then
 		local api_count
 		api_count=$(<"$GH_API_COUNT_FILE")
 		api_count=$((api_count + 1))
@@ -57,7 +59,9 @@ gh() {
 			return "$GH_API_RC"
 		fi
 		if [[ "$GH_LOCKED" == *,* ]]; then
-			printf '%s\n' "$GH_LOCKED" | cut -d, -f"$api_count"
+			local lock_states=()
+			IFS=',' read -r -a lock_states <<<"$GH_LOCKED"
+			printf '%s\n' "${lock_states[$((api_count - 1))]:-}"
 		else
 			printf '%s\n' "$GH_LOCKED"
 		fi
