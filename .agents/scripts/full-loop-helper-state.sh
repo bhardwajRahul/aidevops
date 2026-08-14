@@ -640,9 +640,9 @@ _full_loop_validate_release_candidates() {
 		"" | "$_FULL_LOOP_PHASE_FAILED") ;;
 		"$_FULL_LOOP_RELEASE_NOT_REQUESTED")
 			[[ "$mode" == "$_FULL_LOOP_RELEASE_STRICT" ||
-				(("$mode" == "$_FULL_LOOP_RELEASE_RECONCILE_PUBLISHED" ||
-					"$mode" == "$_FULL_LOOP_RELEASE_RECONCILE_AUTHORIZED") &&
-					"$candidate_role" == "$_FULL_LOOP_RELEASE_ROLE_AGGREGATED") ]] || {
+				"$mode" == "$_FULL_LOOP_RELEASE_RECONCILE_AUTHORIZED" ||
+				("$mode" == "$_FULL_LOOP_RELEASE_RECONCILE_PUBLISHED" &&
+				"$candidate_role" == "$_FULL_LOOP_RELEASE_ROLE_AGGREGATED") ]] || {
 				printf 'Cannot aggregate terminal release:%s evidence for PR #%s\n' "$candidate_status" "$candidate_pr" >&2
 				return 1
 			}
@@ -654,15 +654,15 @@ _full_loop_validate_release_candidates() {
 			fi
 			;;
 		"$_FULL_LOOP_RELEASE_SUPERSEDED")
-			[[ ( "$mode" == "$_FULL_LOOP_RELEASE_RECONCILE_PUBLISHED" ||
-				"$mode" == "$_FULL_LOOP_RELEASE_RECONCILE_AUTHORIZED" ) &&
+			[[ ("$mode" == "$_FULL_LOOP_RELEASE_RECONCILE_PUBLISHED" ||
+				"$mode" == "$_FULL_LOOP_RELEASE_RECONCILE_AUTHORIZED") &&
 				"$candidate_role" == "$_FULL_LOOP_RELEASE_ROLE_AGGREGATED" ]] || return 1
 			_full_loop_release_candidate_evidence_matches "$repo" "$candidate_pr" "$candidate_merge" \
 				"$source_pr" "$source_merge" "$tag_name" "$tag_commit" aggregate || return 1
 			;;
 		"$_FULL_LOOP_RELEASE_PUBLISHED")
-			[[ ( "$mode" == "$_FULL_LOOP_RELEASE_RECONCILE_PUBLISHED" ||
-				"$mode" == "$_FULL_LOOP_RELEASE_RECONCILE_AUTHORIZED" ) &&
+			[[ ("$mode" == "$_FULL_LOOP_RELEASE_RECONCILE_PUBLISHED" ||
+				"$mode" == "$_FULL_LOOP_RELEASE_RECONCILE_AUTHORIZED") &&
 				"$candidate_role" == "source" ]] || return 1
 			;;
 		*)
@@ -729,7 +729,8 @@ _full_loop_persist_release_success() {
 		_full_loop_write_release_receipt "$repo" "$release_source_pr" "$_FULL_LOOP_RELEASE_PUBLISHED" || return 1
 		;;
 	"$_FULL_LOOP_RELEASE_NOT_REQUESTED")
-		[[ "$mode" == "$_FULL_LOOP_RELEASE_STRICT" ]] || return 1
+		[[ "$mode" == "$_FULL_LOOP_RELEASE_STRICT" ||
+			"$mode" == "$_FULL_LOOP_RELEASE_RECONCILE_AUTHORIZED" ]] || return 1
 		_full_loop_write_release_receipt "$repo" "$release_source_pr" "$_FULL_LOOP_RELEASE_PUBLISHED" || return 1
 		full_loop_update_cleanup_release_status "$repo" "$release_source_pr" "$_FULL_LOOP_RELEASE_PUBLISHED" || return 1
 		;;
