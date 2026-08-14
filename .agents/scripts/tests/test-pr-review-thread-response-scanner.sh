@@ -1189,19 +1189,23 @@ test_dispatch_prompt_requires_machine_readable_completion_state() {
 	return 0
 }
 
-test_dispatch_prompt_requires_contract_v3_praise_only_resolution() {
+test_dispatch_prompt_requires_contract_v6_remediation_role_and_praise_only_resolution() {
 	setup_test_env
 	local stable_scanner="${HOME}/.aidevops/agents/scripts/pr-review-thread-response-scanner.sh"
 	local state_file="${AIDEVOPS_PR_REVIEW_THREAD_RESPONSE_STATE_DIR}/owner-repo-1.state"
 	$SCANNER dispatch owner/repo "${TEST_ROOT}/repo"
 	wait_for_headless_log || true
-	if grep -q '^worker_contract_version=5$' "$state_file" 2>/dev/null &&
+	if grep -q '^worker_contract_version=6$' "$state_file" 2>/dev/null &&
 		grep -Fq 'classify it as actionable or praise-only' "$HEADLESS_PROMPT_CAPTURE" 2>/dev/null &&
 		grep -Fq 'Praise-only means positive feedback or an observation with no requested' "$HEADLESS_PROMPT_CAPTURE" 2>/dev/null &&
+		grep -Fq 'Perform one bounded remediation pass' "$HEADLESS_PROMPT_CAPTURE" 2>/dev/null &&
+		grep -Fq 'Do not invoke a PR-review or code-review' "$HEADLESS_PROMPT_CAPTURE" 2>/dev/null &&
+		grep -Fq 'fix actionable defects in the linked worktree' "$HEADLESS_PROMPT_CAPTURE" 2>/dev/null &&
+		! grep -Fq 'PR-loop review model' "$HEADLESS_PROMPT_CAPTURE" 2>/dev/null &&
 		grep -Fq "${stable_scanner} resolve owner/repo <thread_id>" "$HEADLESS_PROMPT_CAPTURE" 2>/dev/null; then
-		print_result "dispatch prompt requires contract-v3 praise-only resolution" 0
+		print_result "dispatch prompt requires contract-v6 remediation role and praise-only resolution" 0
 	else
-		print_result "dispatch prompt requires contract-v3 praise-only resolution" 1 \
+		print_result "dispatch prompt requires contract-v6 remediation role and praise-only resolution" 1 \
 			"state=$(tr '\n' ';' <"$state_file" 2>/dev/null || printf ''), prompt=$(tr '\n' ' ' <"$HEADLESS_PROMPT_CAPTURE" 2>/dev/null || printf '')"
 	fi
 	teardown_test_env
@@ -1636,9 +1640,9 @@ test_dispatch_retries_escalated_previous_worker_contract() {
 	wait_for_headless_log || true
 	if [[ -s "$HEADLESS_LOG" ]] &&
 		grep -q '^attempt_count=1$' "$state_file" 2>/dev/null &&
-		grep -q '^worker_contract_version=5$' "$state_file" 2>/dev/null &&
+		grep -q '^worker_contract_version=6$' "$state_file" 2>/dev/null &&
 		! grep -q '^maintainer_attention=true$' "$state_file" 2>/dev/null &&
-		grep -q 'retrying stale same-fingerprint escalation under worker contract 5 (stored=2)' "$LOGFILE" 2>/dev/null; then
+		grep -q 'retrying stale same-fingerprint escalation under worker contract 6 (stored=2)' "$LOGFILE" 2>/dev/null; then
 		print_result "dispatch retries escalation created under previous worker contract" 0
 	else
 		print_result "dispatch retries escalation created under previous worker contract" 1 \
@@ -2361,7 +2365,7 @@ main() {
 	test_dispatch_prompt_uses_stable_deployed_scanner_path
 	test_dispatch_prompt_mentions_graphql_only_thread_operations
 	test_dispatch_prompt_requires_machine_readable_completion_state
-	test_dispatch_prompt_requires_contract_v3_praise_only_resolution
+	test_dispatch_prompt_requires_contract_v6_remediation_role_and_praise_only_resolution
 	test_dispatch_prompt_requires_exactly_one_terminal_call
 	test_dispatch_prompt_explains_shell_redirection_constraint
 	test_dispatch_prompt_declares_precreated_worktree_contract
