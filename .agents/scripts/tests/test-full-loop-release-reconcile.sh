@@ -350,6 +350,60 @@ printf 'PASS published aggregate reconciliation repairs only authorization-bound
 )
 printf 'PASS a later authorized release includes merged no-release PRs without renewed consent\n'
 
+(
+	export AIDEVOPS_FULL_LOOP_RECEIPT_DIR="${TEST_ROOT}/direct-authorized-reconcile-receipts"
+	# shellcheck source=../full-loop-helper-state.sh
+	source "${SCRIPT_DIR}/full-loop-helper-state.sh"
+	direct_release_path="${TEST_ROOT}/direct-authorized-reconcile-release"
+	direct_cleanup_log="${TEST_ROOT}/direct-authorized-reconcile-cleanup.log"
+	direct_source_merge="9999999999999999999999999999999999999999"
+	direct_tag_commit="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	mkdir -p "$direct_release_path"
+	printf '1.2.7\n' >"${direct_release_path}/VERSION"
+	direct_source_json=$(jq -cn --arg source_merge "$direct_source_merge" \
+		'{source_pr:93,source_merge:$source_merge,aggregated_sources:[]}')
+	git() {
+		local args="$*"
+		case "$args" in
+		*"rev-parse refs/tags/v1.2.7^{commit}"*) printf '%s\n' "$direct_tag_commit" ;;
+		*) return 1 ;;
+		esac
+		return 0
+	}
+	full_loop_update_cleanup_release_status() {
+		local repo="$1"
+		local pr_number="$2"
+		local release_status="$3"
+		printf '%s %s %s\n' "$repo" "$pr_number" "$release_status" >"$direct_cleanup_log"
+		return 0
+	}
+	direct_receipt=$(_full_loop_release_receipt_path test/repo 93)
+	_full_loop_write_release_receipt test/repo 93 "$_FULL_LOOP_RELEASE_NOT_REQUESTED"
+	cp "$direct_receipt" "${TEST_ROOT}/direct-authorized-reconcile-original.status"
+	if _full_loop_validate_release_candidates test/repo "$direct_source_json" \
+		"$_FULL_LOOP_RELEASE_RECONCILE_PUBLISHED" v1.2.7 "$direct_tag_commit" >/dev/null 2>&1; then
+		printf 'FAIL unbound published reconciliation accepted a direct no-release source\n'
+		exit 1
+	fi
+	if _full_loop_persist_release_success test/repo "$direct_release_path" "$direct_source_json" \
+		93 "$direct_source_merge" "$_FULL_LOOP_RELEASE_RECONCILE_PUBLISHED" >/dev/null 2>&1; then
+		printf 'FAIL unbound published reconciliation replaced a direct no-release receipt\n'
+		exit 1
+	fi
+	cmp -s "$direct_receipt" "${TEST_ROOT}/direct-authorized-reconcile-original.status"
+	_full_loop_validate_release_candidates test/repo "$direct_source_json" \
+		"$_FULL_LOOP_RELEASE_RECONCILE_AUTHORIZED" v1.2.7 "$direct_tag_commit"
+	_full_loop_persist_release_success test/repo "$direct_release_path" "$direct_source_json" \
+		93 "$direct_source_merge" "$_FULL_LOOP_RELEASE_RECONCILE_AUTHORIZED"
+	grep -qx "$_FULL_LOOP_RELEASE_PUBLISHED" "$direct_receipt"
+	grep -qx "test/repo 93 ${_FULL_LOOP_RELEASE_PUBLISHED}" "$direct_cleanup_log"
+	_full_loop_validate_release_candidates test/repo "$direct_source_json" \
+		"$_FULL_LOOP_RELEASE_RECONCILE_AUTHORIZED" v1.2.7 "$direct_tag_commit"
+	_full_loop_persist_release_success test/repo "$direct_release_path" "$direct_source_json" \
+		93 "$direct_source_merge" "$_FULL_LOOP_RELEASE_RECONCILE_AUTHORIZED"
+)
+printf 'PASS explicit publication intent reconciles a direct no-release source exactly once\n'
+
 legacy_source_json_file="${TEST_ROOT}/legacy-source.json"
 (
 	_full_loop_release_tag_body() {
