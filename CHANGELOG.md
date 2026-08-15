@@ -10,6 +10,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.265] - 2026-08-15
+
+### Added
+
+- add campaign growth orchestration (#30272)
+- add privacy-safe marketing optimization (#30266)
+
+### Changed
+
+- Maintenance: prepare authorized release aggregation (#30303)
+- Documentation: split performance plane reference (#30290)
+- Refactor: restore Qlty baseline (#30273)
+- Refactor: split campaign production contracts (#30264)
+
+### Fixed
+
+- preserve locked issue lifecycle authority
+- keep linked PR conversations open (#30293)
+- prevent adjective closing references (#30292)
+- prevent stale recovery from displacing live interactive sessions
+- permit explicit parent issue enrichment (#30289)
+- suppress expected feedback redispatch alerts (#30283)
+
 ## [3.32.264] - 2026-08-15
 
 ### Changed
