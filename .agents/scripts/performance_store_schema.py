@@ -16,8 +16,9 @@ from performance_contract import PerformanceContractError
 from _performance_store_config import CONFIG_SCHEMA as CONFIG_SCHEMA, validate_config
 from _performance_store_paths import PlanePaths, resolve_paths as resolve_paths
 from _performance_store_files import write_new as _write_new
+from _performance_store_migrations import migrate_v1_to_v2, migrate_v2_to_v3
 
-STORE_SCHEMA_VERSION = 2
+STORE_SCHEMA_VERSION = 3
 PERFORMANCE_GITIGNORE = """# Private/local performance-plane state
 raw/
 exports/
@@ -28,6 +29,7 @@ marketing/exports/
 marketing/index/
 marketing/quarantine/
 marketing/leases/
+marketing/optimization-work/
 
 # Explicit public-safe projections and configuration remain versionable
 !marketing/summaries/
@@ -178,34 +180,12 @@ def migrate(
         raise PerformanceContractError("performance store schema is newer than this runtime")
     if version == STORE_SCHEMA_VERSION:
         return
+    if version == 2:
+        migrate_v2_to_v3(connection)
+        return
     if version == 1:
-        connection.execute("BEGIN IMMEDIATE")
-        try:
-            columns = {
-                str(row["name"])
-                for row in connection.execute("PRAGMA table_info(events)")
-            }
-            if "period_start" not in columns:
-                connection.execute("ALTER TABLE events ADD COLUMN period_start TEXT")
-            if "period_end" not in columns:
-                connection.execute("ALTER TABLE events ADD COLUMN period_end TEXT")
-            if "dimensions_json" not in columns:
-                connection.execute(
-                    "ALTER TABLE events ADD COLUMN dimensions_json TEXT NOT NULL DEFAULT '{}'"
-                )
-            if "source_observed_at" not in columns:
-                connection.execute(
-                    "ALTER TABLE events ADD COLUMN source_observed_at TEXT"
-                )
-            if "source_recorded_at" not in columns:
-                connection.execute(
-                    "ALTER TABLE events ADD COLUMN source_recorded_at TEXT"
-                )
-            connection.execute("PRAGMA user_version=2")
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
+        migrate_v1_to_v2(connection)
+        migrate(connection, initialize=initialize)
         return
     if version != 0:
         raise PerformanceContractError("unsupported performance store migration path")
@@ -235,6 +215,22 @@ def migrate(
             updated_at TEXT NOT NULL,
             PRIMARY KEY(source, account_ref)
         );
+        CREATE TABLE source_history (
+            state_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            account_ref TEXT NOT NULL,
+            adapter TEXT NOT NULL,
+            status TEXT NOT NULL,
+            coverage TEXT NOT NULL,
+            missing_scopes_json TEXT NOT NULL,
+            cursor_ref TEXT,
+            last_observed_at TEXT,
+            last_success_at TEXT,
+            last_evidence_ref TEXT,
+            stale_after_seconds INTEGER NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX source_history_boundary_idx ON source_history(source,account_ref,updated_at,state_id);
         CREATE TABLE leases (
             source TEXT NOT NULL,
             account_ref TEXT NOT NULL,
@@ -243,6 +239,16 @@ def migrate(
             expires_at INTEGER NOT NULL,
             PRIMARY KEY(source, account_ref)
         );
+        CREATE TABLE lease_history (
+            lease_event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            account_ref TEXT NOT NULL,
+            token TEXT NOT NULL,
+            action TEXT NOT NULL,
+            occurred_at INTEGER NOT NULL,
+            expires_at INTEGER
+        );
+        CREATE INDEX lease_history_boundary_idx ON lease_history(source,account_ref,token,occurred_at,lease_event_id);
         CREATE TABLE evidence (
             evidence_ref TEXT PRIMARY KEY,
             source TEXT NOT NULL,
@@ -301,6 +307,7 @@ def migrate(
             account_ref TEXT NOT NULL,
             effective_at TEXT NOT NULL,
             observed_at TEXT NOT NULL,
+            recorded_at TEXT NOT NULL,
             evidence_ref TEXT NOT NULL REFERENCES evidence(evidence_ref)
         );
         CREATE INDEX consent_subject_idx ON consent_ledger(subject_id, purpose, effective_at);
@@ -313,6 +320,7 @@ def migrate(
             account_ref TEXT NOT NULL,
             effective_at TEXT NOT NULL,
             observed_at TEXT NOT NULL,
+            recorded_at TEXT NOT NULL,
             evidence_ref TEXT NOT NULL REFERENCES evidence(evidence_ref)
         );
         CREATE INDEX suppression_subject_idx ON suppression_ledger(subject_id, effective_at);
@@ -360,7 +368,11 @@ def migrate(
         CREATE TRIGGER reconciliation_no_delete BEFORE DELETE ON reconciliations BEGIN SELECT RAISE(ABORT, 'reconciliations are immutable'); END;
         CREATE TRIGGER identity_links_no_update BEFORE UPDATE ON identity_links BEGIN SELECT RAISE(ABORT, 'identity links are immutable'); END;
         CREATE TRIGGER identity_links_no_delete BEFORE DELETE ON identity_links BEGIN SELECT RAISE(ABORT, 'identity links are immutable'); END;
-        PRAGMA user_version=2;
+        CREATE TRIGGER source_history_no_update BEFORE UPDATE ON source_history BEGIN SELECT RAISE(ABORT, 'source history is immutable'); END;
+        CREATE TRIGGER source_history_no_delete BEFORE DELETE ON source_history BEGIN SELECT RAISE(ABORT, 'source history is immutable'); END;
+        CREATE TRIGGER lease_history_no_update BEFORE UPDATE ON lease_history BEGIN SELECT RAISE(ABORT, 'lease history is immutable'); END;
+        CREATE TRIGGER lease_history_no_delete BEFORE DELETE ON lease_history BEGIN SELECT RAISE(ABORT, 'lease history is immutable'); END;
+        PRAGMA user_version=3;
         COMMIT;
         """
     )
