@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.264] - 2026-08-15
+
+### Changed
+
+- Refactor: split marketing performance store persistence (#30257)
+- Performance: bound release tag discovery latency in status and release guards
+
+### Fixed
+
+- reuse Hostinger SSH credentials across account sites
+
 ## [3.32.263] - 2026-08-14
 
 ### Changed
