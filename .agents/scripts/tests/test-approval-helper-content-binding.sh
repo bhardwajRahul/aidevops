@@ -45,7 +45,12 @@ set -euo pipefail
 [[ "${1:-}" == "api" ]] || exit 1
 endpoint="${2:-}"
 if [[ -n "${GH_FAIL_ENDPOINT:-}" && "$endpoint" == *"${GH_FAIL_ENDPOINT}"* ]]; then
-	exit 1
+	fail_count_file="${FIXTURES}/gh-fail-count"
+	fail_count=0
+	[[ ! -f "$fail_count_file" ]] || fail_count=$(<"$fail_count_file")
+	fail_count=$((fail_count + 1))
+	printf '%s\n' "$fail_count" >"$fail_count_file"
+	[[ "$fail_count" -le "${GH_FAIL_ENDPOINT_AFTER:-0}" ]] || exit 1
 fi
 case "$endpoint" in
 	user) printf '%s\n' "${GH_AUTH_USER:-maintainer}" ;;
@@ -421,8 +426,9 @@ test_post_approval_linked_references() {
 }
 
 write_locked_issue_fixture() {
+	local include_tier="${1:-true}"
 	write_baseline_fixtures
-	jq '.locked = true | .active_lock_reason = "resolved" | .labels = [{id:6,node_id:"L_6",name:"external-contributor"},{id:7,node_id:"L_7",name:"origin:interactive"},{id:8,node_id:"L_8",name:"review:approve"},{id:9,node_id:"L_9",name:"tier:standard"}] | .assignees = []' "${FIXTURES}/issue-41.json" >"${FIXTURES}/issue.tmp" && mv "${FIXTURES}/issue.tmp" "${FIXTURES}/issue-41.json"
+	jq --arg include_tier "$include_tier" '.locked = true | .active_lock_reason = "resolved" | .labels = ([{id:6,node_id:"L_6",name:"external-contributor"},{id:7,node_id:"L_7",name:"origin:interactive"},{id:8,node_id:"L_8",name:"review:approve"}] + if $include_tier == "true" then [{id:9,node_id:"L_9",name:"tier:standard"}] else [] end) | .assignees = []' "${FIXTURES}/issue-41.json" >"${FIXTURES}/issue.tmp" && mv "${FIXTURES}/issue.tmp" "${FIXTURES}/issue-41.json"
 	jq '.[0] += [{id:418,node_id:"EV_418",event:"locked",created_at:"2026-01-01T00:04:00Z",actor:{id:1,node_id:"U_1",login:"maintainer",type:"User"}}]' "${FIXTURES}/timeline-41.json" >"${FIXTURES}/timeline.tmp" && mv "${FIXTURES}/timeline.tmp" "${FIXTURES}/timeline-41.json"
 	append_signed_comment issue 41 "2026-01-01T00:05:00Z" 4199
 	return 0
@@ -431,6 +437,64 @@ write_locked_issue_fixture() {
 append_issue_timeline_event() {
 	local event_json="$1"
 	jq --argjson event "$event_json" '.[0] += [$event]' "${FIXTURES}/timeline-41.json" >"${FIXTURES}/timeline.tmp" && mv "${FIXTURES}/timeline.tmp" "${FIXTURES}/timeline-41.json"
+	return 0
+}
+
+test_locked_issue_tier_backfill_continuity() {
+	local event_json=""
+	local output=""
+	local rc=0
+	local tier=""
+	for tier in simple standard thinking; do
+		write_locked_issue_fixture false
+		jq --arg tier "tier:${tier}" '.labels += [{id:10,node_id:"L_10",name:$tier}]' "${FIXTURES}/issue-41.json" >"${FIXTURES}/issue.tmp" && mv "${FIXTURES}/issue.tmp" "${FIXTURES}/issue-41.json"
+		event_json=$(jq -nc --arg tier "tier:${tier}" '{id:4211,node_id:"EV_4211",event:"labeled",created_at:"2026-01-01T00:06:00Z",actor:{id:1,login:"maintainer",type:"User"},label:{name:$tier}}')
+		append_issue_timeline_event "$event_json"
+		assert_verify "trusted ${tier} tier backfill preserves continuously locked issue approval" issue 41 VERIFIED 0
+	done
+
+	write_locked_issue_fixture
+	jq '.labels += [{id:10,node_id:"L_10",name:"tier:thinking"}]' "${FIXTURES}/issue-41.json" >"${FIXTURES}/issue.tmp" && mv "${FIXTURES}/issue.tmp" "${FIXTURES}/issue-41.json"
+	append_issue_timeline_event '{"id":42111,"node_id":"EV_42111","event":"labeled","created_at":"2026-01-01T00:06:00Z","actor":{"id":1,"login":"maintainer","type":"User"},"label":{"name":"tier:thinking"}}'
+	assert_verify "adding a second canonical tier remains stale" issue 41 STALE_APPROVAL 4
+
+	write_locked_issue_fixture false
+	jq '.labels += [{id:10,node_id:"L_10",name:"tier:simple"},{id:11,node_id:"L_11",name:"tier:thinking"}]' "${FIXTURES}/issue-41.json" >"${FIXTURES}/issue.tmp" && mv "${FIXTURES}/issue.tmp" "${FIXTURES}/issue-41.json"
+	append_issue_timeline_event '{"id":42112,"node_id":"EV_42112","event":"labeled","created_at":"2026-01-01T00:06:00Z","actor":{"id":1,"login":"maintainer","type":"User"},"label":{"name":"tier:simple"}}'
+	append_issue_timeline_event '{"id":42113,"node_id":"EV_42113","event":"labeled","created_at":"2026-01-01T00:06:01Z","actor":{"id":1,"login":"maintainer","type":"User"},"label":{"name":"tier:thinking"}}'
+	assert_verify "adding multiple canonical tiers remains stale" issue 41 STALE_APPROVAL 4
+
+	write_locked_issue_fixture false
+	jq '.labels += [{id:10,node_id:"L_10",name:"tier:standard"}]' "${FIXTURES}/issue-41.json" >"${FIXTURES}/issue.tmp" && mv "${FIXTURES}/issue.tmp" "${FIXTURES}/issue-41.json"
+	append_issue_timeline_event '{"id":42114,"node_id":"EV_42114","event":"labeled","created_at":"2026-01-01T00:06:00Z","actor":{"id":1,"login":"maintainer","type":"User"},"label":{"name":"tier:standard"}}'
+	output=$(GH_FAIL_ENDPOINT="collaborators/maintainer/permission" run_verify issue 41) || rc=$?
+	if [[ "$output" == "API_ERROR" && "$rc" -eq 6 ]]; then
+		print_result "tier backfill permission uncertainty fails closed" 0
+	else
+		print_result "tier backfill permission uncertainty fails closed" 1 "expected=API_ERROR/6, actual=${output}/${rc}"
+	fi
+
+	write_locked_issue_fixture false
+	jq '.labels += [{id:10,node_id:"L_10",name:"tier:standard"}]' "${FIXTURES}/issue-41.json" >"${FIXTURES}/issue.tmp" && mv "${FIXTURES}/issue.tmp" "${FIXTURES}/issue-41.json"
+	append_issue_timeline_event '{"id":42115,"node_id":"EV_42115","event":"labeled","created_at":"2026-01-01T00:06:00Z","actor":{"id":1,"login":"maintainer","type":"User"},"label":{"name":"tier:standard"}}'
+	rc=0
+	rm -f "${FIXTURES}/gh-fail-count"
+	output=$(GH_FAIL_ENDPOINT="issues/41/timeline" GH_FAIL_ENDPOINT_AFTER=1 run_verify issue 41) || rc=$?
+	if [[ "$output" == "API_ERROR" && "$rc" -eq 6 ]]; then
+		print_result "tier backfill timeline uncertainty fails closed" 0
+	else
+		print_result "tier backfill timeline uncertainty fails closed" 1 "expected=API_ERROR/6, actual=${output}/${rc}"
+	fi
+
+	write_locked_issue_fixture false
+	jq '.labels += [{id:10,node_id:"L_10",name:"tier:standard"}]' "${FIXTURES}/issue-41.json" >"${FIXTURES}/issue.tmp" && mv "${FIXTURES}/issue.tmp" "${FIXTURES}/issue-41.json"
+	append_issue_timeline_event '{"id":4212,"node_id":"EV_4212","event":"labeled","created_at":"2026-01-01T00:06:00Z","actor":{"id":2,"login":"contributor","type":"User"},"label":{"name":"tier:standard"}}'
+	assert_verify "untrusted tier backfill remains stale" issue 41 STALE_APPROVAL 4
+
+	write_locked_issue_fixture
+	jq '.labels |= map(select(.name != "tier:standard"))' "${FIXTURES}/issue-41.json" >"${FIXTURES}/issue.tmp" && mv "${FIXTURES}/issue.tmp" "${FIXTURES}/issue-41.json"
+	append_issue_timeline_event '{"id":4213,"node_id":"EV_4213","event":"unlabeled","created_at":"2026-01-01T00:06:00Z","actor":{"id":1,"login":"maintainer","type":"User"},"label":{"name":"tier:standard"}}'
+	assert_verify "trusted tier removal remains stale" issue 41 STALE_APPROVAL 4
 	return 0
 }
 
@@ -548,6 +612,7 @@ main() {
 	test_trusted_lifecycle_comments
 	test_post_approval_linked_references
 	test_locked_issue_continuity
+	test_locked_issue_tier_backfill_continuity
 
 	reset_and_sign pr 42
 	local marker_drift="<!-- aidevops-signed-approval --> unsigned external drift"
