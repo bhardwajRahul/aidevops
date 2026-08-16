@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.267] - 2026-08-16
+
+### Changed
+
+- Maintenance: complete t18244 bookkeeping
+
+### Fixed
+
+- provision managed labels before gh creates
+- bound review-thread dispatch batches
+- prevent unsafe OpenCode database vacuum
+- handle unset OpenCode temp environment
+
 ## [3.32.266] - 2026-08-16
 
 ### Fixed
