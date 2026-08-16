@@ -442,6 +442,16 @@ BODY_V2_WITH_COMMAND_PLACEHOLDER="${BODY_V2_COMPLETE}
 
 <details><summary>Verification still required</summary>Run <command> before dispatch.</details>"
 
+BODY_V2_COLLAPSED_CONTRACT="<details>
+<summary>Worker implementation contract</summary>
+
+${BODY_V2_COMPLETE}
+
+</details>"
+
+BODY_V2_DONE_WHEN=$(printf '%s\n' "$BODY_V2_COMPLETE" | sed \
+	-e 's/^## Acceptance Criteria$/## Done when/')
+
 # Short concrete paths remain substantive, and Bun is a supported verifier.
 # shellcheck disable=SC2016
 BODY_V2_SHORT_PATH_BUN=$(printf '%s\n' "$BODY_V2_COMPLETE" | sed \
@@ -571,7 +581,7 @@ mkdir -p "$TMP_REPO/todo/tasks"
 
 # Stub gh command for offline testing
 GH_STUB_DIR=$(mktemp -d)
-cat > "$GH_STUB_DIR/gh" <<'GHSTUB'
+cat >"$GH_STUB_DIR/gh" <<'GHSTUB'
 #!/usr/bin/env bash
 # Stub gh for test-brief-readiness.sh
 if [[ "${1:-}" == "issue" && "${2:-}" == "view" ]]; then
@@ -604,7 +614,7 @@ else
 fi
 
 # Check stub does not duplicate full template (should be ≤20 lines)
-line_count=$(wc -l < "$brief_file" 2>/dev/null || echo 999)
+line_count=$(wc -l <"$brief_file" 2>/dev/null || echo 999)
 if [[ $line_count -le 25 ]]; then
 	pass "T7c: stub brief is ≤25 lines ($line_count)"
 else
@@ -612,7 +622,7 @@ else
 fi
 
 # --- Test 8: Stub skips if brief already exists ---
-echo "# Existing brief" > "$brief_file"
+echo "# Existing brief" >"$brief_file"
 PATH="$GH_STUB_DIR:$PATH" "$HELPER" stub "t9999" "12345" "owner/repo" "$TMP_REPO" 2>/dev/null
 existing_content=$(cat "$brief_file")
 if [[ "$existing_content" == "# Existing brief" ]]; then
@@ -624,7 +634,7 @@ fi
 # --- Test 9: Similarity scoring ---
 # Create a brief that mostly duplicates the worker-ready body
 sim_brief_file=$(mktemp)
-printf '%s\n' "$BODY_WORKER_READY" > "$sim_brief_file"
+printf '%s\n' "$BODY_WORKER_READY" >"$sim_brief_file"
 
 output=$("$HELPER" similarity "$sim_brief_file" --body "$BODY_WORKER_READY" 2>/dev/null)
 sim_rc=$?
@@ -639,7 +649,7 @@ else
 fi
 
 # Low similarity: brief with different content
-echo "Completely different content that shares nothing with the issue body whatsoever" > "$sim_brief_file"
+echo "Completely different content that shares nothing with the issue body whatsoever" >"$sim_brief_file"
 output=$("$HELPER" similarity "$sim_brief_file" --body "$BODY_WORKER_READY" 2>/dev/null)
 similarity=$(printf '%s\n' "$output" | grep '^SIMILARITY=' | sed 's/SIMILARITY=//')
 
@@ -844,6 +854,24 @@ if [[ "$output" == *"WORKER_READY=false"* && "$output" == *"placeholder:unfilled
 	pass "T31: generated wrappers preserve and reject inner <command> placeholders"
 else
 	fail "T31: generated wrapper inner-text preservation" "output: $output"
+fi
+
+# --- Test 32: a complete schema-v2 contract remains ready inside details ---
+output=$("$HELPER" check --body "$BODY_V2_COLLAPSED_CONTRACT")
+rc=$?
+if [[ $rc -eq 0 && "$output" == *"WORKER_READY=true"* && "$output" == *"VALIDATION_ERRORS=none"* ]]; then
+	pass "T32: collapsed worker contract remains schema-v2 ready"
+else
+	fail "T32: collapsed worker contract readiness" "got exit $rc, output: $output"
+fi
+
+# --- Test 33: reader-facing Done when is accepted as the criteria contract ---
+output=$("$HELPER" check --body "$BODY_V2_DONE_WHEN")
+rc=$?
+if [[ $rc -eq 0 && "$output" == *"WORKER_READY=true"* && "$output" == *"VALIDATION_ERRORS=none"* ]]; then
+	pass "T33: Done when remains schema-v2 ready"
+else
+	fail "T33: Done when readiness alias" "got exit $rc, output: $output"
 fi
 
 # ---------------------------------------------------------------------------

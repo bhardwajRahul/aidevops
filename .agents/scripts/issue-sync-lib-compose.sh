@@ -36,6 +36,9 @@
 [[ -n "${_ISSUE_SYNC_LIB_COMPOSE_LOADED:-}" ]] && return 0
 _ISSUE_SYNC_LIB_COMPOSE_LOADED=1
 
+ISSUE_SYNC_DETAILS_OPEN="<details>"
+ISSUE_SYNC_DETAILS_CLOSE="</details>"
+
 # Defensive SCRIPT_DIR fallback
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
 	# Pure-bash dirname replacement — avoids external binary dependency
@@ -169,8 +172,8 @@ _post_parent_task_no_markers_warning() {
 	# t2572: comments API caps at 30/page; --paginate concatenates. Cannot
 	# combine --slurp with --jq (gh api rejects). Stream per-page and count.
 	existing=$(gh api --paginate "repos/${slug}/issues/${issue_num}/comments" \
-		--jq ".[] | select(.body | contains(\"${marker}\")) | .id" \
-		| wc -l | tr -d ' ') || existing=""
+		--jq ".[] | select(.body | contains(\"${marker}\")) | .id" |
+		wc -l | tr -d ' ') || existing=""
 	if [[ "$existing" =~ ^[1-9][0-9]*$ ]]; then
 		return 1
 	fi
@@ -292,19 +295,19 @@ _compose_issue_plan_sections() {
 
 	local extra_sections
 	extra_sections=$(extract_plan_extra_sections "$plan_section")
-	[[ -n "$extra_sections" ]] && body="$body"$'\n\n'"<details><summary>Plan: Context &amp; Architecture</summary>"$'\n'"$extra_sections"$'\n\n'"</details>"
+	[[ -n "$extra_sections" ]] && body="$body"$'\n\n'"${ISSUE_SYNC_DETAILS_OPEN}<summary>Plan: Context &amp; Architecture</summary>"$'\n'"$extra_sections"$'\n\n'"$ISSUE_SYNC_DETAILS_CLOSE"
 
 	local progress
 	progress=$(extract_plan_progress "$plan_section")
-	[[ -n "$progress" ]] && body="$body"$'\n\n'"<details><summary>Plan: Progress</summary>"$'\n\n'"$progress"$'\n\n'"</details>"
+	[[ -n "$progress" ]] && body="$body"$'\n\n'"${ISSUE_SYNC_DETAILS_OPEN}<summary>Plan: Progress</summary>"$'\n\n'"$progress"$'\n\n'"$ISSUE_SYNC_DETAILS_CLOSE"
 
 	local decisions
 	decisions=$(extract_plan_decisions "$plan_section")
-	[[ -n "$decisions" ]] && body="$body"$'\n\n'"<details><summary>Plan: Decision Log</summary>"$'\n\n'"$decisions"$'\n\n'"</details>"
+	[[ -n "$decisions" ]] && body="$body"$'\n\n'"${ISSUE_SYNC_DETAILS_OPEN}<summary>Plan: Decision Log</summary>"$'\n\n'"$decisions"$'\n\n'"$ISSUE_SYNC_DETAILS_CLOSE"
 
 	local discoveries
 	discoveries=$(extract_plan_discoveries "$plan_section")
-	[[ -n "$discoveries" ]] && body="$body"$'\n\n'"<details><summary>Plan: Discoveries</summary>"$'\n\n'"$discoveries"$'\n\n'"</details>"
+	[[ -n "$discoveries" ]] && body="$body"$'\n\n'"${ISSUE_SYNC_DETAILS_OPEN}<summary>Plan: Discoveries</summary>"$'\n\n'"$discoveries"$'\n\n'"$ISSUE_SYNC_DETAILS_CLOSE"
 
 	echo "$body"
 	return 0
@@ -334,7 +337,7 @@ _compose_issue_related_files() {
 			rel_path="${file#"$project_root"/}"
 			file_summary=$(extract_file_summary "$file" 30)
 			if [[ -n "$file_summary" ]]; then
-				body="$body"$'\n\n'"<details><summary><code>$rel_path</code></summary>"$'\n\n'"$file_summary"$'\n\n'"</details>"
+				body="$body"$'\n\n'"${ISSUE_SYNC_DETAILS_OPEN}<summary><code>$rel_path</code></summary>"$'\n\n'"$file_summary"$'\n\n'"$ISSUE_SYNC_DETAILS_CLOSE"
 			else
 				body="$body"$'\n\n'"- [\`$rel_path\`]($rel_path)"
 			fi
@@ -393,7 +396,7 @@ _compose_issue_content() {
 	local blocks="$4"
 	local notes="$5"
 
-	[[ -n "$description" ]] && body="$body"$'\n\n'"## Description"$'\n\n'"$description"
+	[[ -n "$description" ]] && body="$body"$'\n\n'"## Outcome"$'\n\n'"$description"
 	[[ -n "$blocked_by" ]] && body="$body"$'\n\n'"**Blocked by:** \`$blocked_by\`"
 	[[ -n "$blocks" ]] && body="$body"$'\n'"**Blocks:** \`$blocks\`"
 	[[ -n "$notes" ]] && body="$body"$'\n\n'"## Notes"$'\n\n'"$notes"
@@ -415,7 +418,7 @@ _compose_issue_brief_workflow_reference() {
 		return 0
 	fi
 
-	body="$body"$'\n\n'"## Brief Workflow"$'\n\n'"This issue body is composed under \`.agents/workflows/brief.md\`. Newly queued auto-dispatch work must pass its \`Dispatch Readiness Contract (brief schema v2)\`: complete write surface, hazards and compatibility, executable verification mapped to affected surfaces, and positive plus negative/regression acceptance criteria."
+	body="$body"$'\n\n'"$ISSUE_SYNC_DETAILS_OPEN"$'\n'"<summary>Brief workflow contract</summary>"$'\n\n'"## Brief Workflow"$'\n\n'"This issue body is composed under \`.agents/workflows/brief.md\`. Newly queued auto-dispatch work must pass its \`Dispatch Readiness Contract (brief schema v2)\`: complete write surface, hazards and compatibility, executable verification mapped to affected surfaces, and positive plus negative/regression acceptance criteria."$'\n\n'"$ISSUE_SYNC_DETAILS_CLOSE"
 
 	echo "$body"
 	return 0
@@ -516,9 +519,8 @@ _compose_issue_sections() {
 
 # Extract worker guidance from the brief's "How" section (t1900).
 # Promotes the complete schema-v2 How contract, including write surface,
-# hazards/compatibility, and verification-before-dispatch sections.
-# into a top-level "Worker Guidance" section in the issue body so workers
-# see actionable context immediately without reading the full brief.
+# hazards/compatibility, and verification-before-dispatch sections. The raw
+# headings remain machine-readable inside a collapsed reader-facing section.
 # Arguments:
 #   $1 - current body text
 #   $2 - brief_file path
@@ -547,6 +549,7 @@ _compose_issue_worker_guidance() {
 	# Historical briefs retain the t2063 heading gate. Schema-v2 briefs use the
 	# complete readiness validator so placeholder-only guidance is never promoted.
 	local has_files has_steps is_schema_v2
+	local promote=0
 	has_files=$(echo "$how_section" | grep -ic '### Files to Modify\|EDIT:\|NEW:' || true)
 	has_steps=$(echo "$how_section" | grep -ic '### Implementation Steps' || true)
 	is_schema_v2=$(grep -cF '<!-- aidevops:brief-schema=v2 -->' "$brief_file" || true)
@@ -556,10 +559,25 @@ _compose_issue_worker_guidance() {
 		local brief_body=""
 		brief_body=$(<"$brief_file")
 		if [[ -f "$readiness_helper" ]] && bash "$readiness_helper" check --body "$brief_body" >/dev/null 2>&1; then
-			body="$body"$'\n\n'"## Worker Guidance"$'\n\n'"$how_section"
+			promote=1
 		fi
 	elif [[ "$has_files" -gt 0 || "$has_steps" -gt 0 ]]; then
-		body="$body"$'\n\n'"## Worker Guidance"$'\n\n'"$how_section"
+		promote=1
+	fi
+
+	if [[ "$promote" -eq 1 ]]; then
+		local done_when=""
+		if ! printf '%s\n' "$body" | grep -qiE '^## (Done when|Acceptance Criteria)[[:space:]]*$'; then
+			done_when=$(awk '
+				/^## Acceptance [Cc]riteria[[:space:]]*$/ { capture=1; next }
+				/^## / && capture { exit }
+				capture && /^- \[[ xX]\]/ { print }
+			' "$brief_file")
+		fi
+		if [[ -n "$done_when" ]]; then
+			body="$body"$'\n\n'"## Done when"$'\n\n'"$done_when"
+		fi
+		body="$body"$'\n\n'"$ISSUE_SYNC_DETAILS_OPEN"$'\n'"<summary>Worker implementation contract</summary>"$'\n\n'"## Worker Guidance"$'\n\n'"$how_section"$'\n\n'"$ISSUE_SYNC_DETAILS_CLOSE"
 	fi
 
 	echo "$body"
@@ -580,14 +598,23 @@ _compose_issue_brief() {
 	fi
 
 	local brief_content
-	brief_content=$(awk '
+	local drop_promoted_how=0
+	local drop_promoted_acceptance=0
+	[[ "$body" == *"## Worker Guidance"* ]] && drop_promoted_how=1
+	[[ "$body" == *"## Done when"* ]] && drop_promoted_acceptance=1
+	brief_content=$(awk -v drop_how="$drop_promoted_how" -v drop_acceptance="$drop_promoted_acceptance" '
 		BEGIN { in_front=0; front_done=0 }
 		/^---$/ && !front_done { in_front=!in_front; if(!in_front) front_done=1; next }
-		!in_front { print }
+		!in_front && /^# / { next }
+		!in_front && drop_how == 1 && /^## How([[:space:](]|$)/ { in_how=1; next }
+		!in_front && in_how && /^## / { in_how=0 }
+		!in_front && drop_acceptance == 1 && /^## Acceptance [Cc]riteria[[:space:]]*$/ { in_acceptance=1; next }
+		!in_front && in_acceptance && /^## / { in_acceptance=0 }
+		!in_front && !in_how && !in_acceptance { print }
 	' "$brief_file")
 
 	if [[ -n "$brief_content" && ${#brief_content} -gt 10 ]]; then
-		body="$body"$'\n\n'"## Task Brief"$'\n\n'"$brief_content"
+		body="$body"$'\n\n'"$ISSUE_SYNC_DETAILS_OPEN"$'\n'"<summary>Full task brief and audit context</summary>"$'\n\n'"## Task Brief"$'\n\n'"$brief_content"$'\n\n'"$ISSUE_SYNC_DETAILS_CLOSE"
 	fi
 
 	echo "$body"

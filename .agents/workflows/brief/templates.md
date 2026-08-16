@@ -10,28 +10,31 @@ Templates for GitHub-written content. Shared formatting rules: `workflows/brief.
 Wrap tier content in this structure for `gh issue create`:
 
 ```markdown
-## Description
+## Outcome
 
 {1-2 sentence summary of what needs to change and why}
+
+## Done when
+
+- [ ] {observable positive criterion}
+- [ ] {negative or regression criterion}
+- [ ] Lint clean
+- [ ] No unrelated changes
+
+<details>
+<summary>Worker implementation contract</summary>
 
 ## Implementation
 
 {Tier-appropriate content from tier-simple.md, tier-standard.md, or tier-thinking.md}
 
-## Acceptance Criteria
-
-- [ ] {criterion with verify block if possible}
-- [ ] Lint clean
-- [ ] No unrelated changes
-
-## Done When
-
-{Concrete, machine-verifiable completion signal — the worker does not stop until these are true}
+## Verification
 
 - `{lint/test command}` exits 0
 - PR exists with `Closes #{issue_number}` in body
 - MERGE_SUMMARY comment posted on PR
 - Issue closed with closing comment linking PR
+</details>
 ```
 
 Always include a tier label: `tier:simple`, `tier:standard`, or `tier:thinking`.
@@ -91,21 +94,23 @@ Follow `templates/escalation-report-template.md` (covers: what was attempted, st
 For worker-created PRs. Serves review bots and human reviewers.
 
 ```markdown
-## Summary
+## Outcome
 
 {1-3 bullet points: what changed and why}
-
-## Changes
-
-- `{file_path}` — {what changed in this file}
 
 ## Verification
 
 - {Test output, lint results, or manual verification}
 
-## Linked Issue
+<!-- Add a Risks and rollback section only when material. -->
 
 Closes #{issue_number}
+
+<details>
+<summary>Files changed and implementation notes</summary>
+
+- `{file_path}` — {what changed in this file}
+</details>
 ```
 
 **Rules** (from `AGENTS.md` "Traceability"):

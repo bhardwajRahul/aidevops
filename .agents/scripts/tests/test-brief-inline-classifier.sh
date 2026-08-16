@@ -231,10 +231,10 @@ shellcheck state.sh
 BRIEF
 
 result=$(_compose_issue_worker_guidance "base body" "$TMP/brief-schema-v2.md")
-if [[ "$result" == *"## Worker Guidance"* ]] && [[ "$result" == *"### Complete Write Surface"* ]] && [[ "$result" == *"### Hazards and Compatibility"* ]] && [[ "$result" == *"### Verification Before Dispatch"* ]]; then
-	pass "A4 complete schema-v2 sections are promoted together"
+if [[ "$result" == *"## Done when"* ]] && [[ "$result" == *"<summary>Worker implementation contract</summary>"* ]] && [[ "$result" == *"## Worker Guidance"* ]] && [[ "$result" == *"### Complete Write Surface"* ]] && [[ "$result" == *"### Hazards and Compatibility"* ]] && [[ "$result" == *"### Verification Before Dispatch"* ]]; then
+	pass "A4 complete schema-v2 sections are promoted behind a reader summary"
 else
-	fail "A4 schema-v2 promotion" "expected all new readiness sections in Worker Guidance"
+	fail "A4 schema-v2 promotion" "expected Done when plus all readiness sections in collapsed Worker Guidance"
 fi
 
 # Test A5: incomplete schema-v2 guidance is not promoted
@@ -327,20 +327,20 @@ Test frontmatter stripping.
 BRIEF
 
 result=$(_compose_issue_brief "base body" "$TMP/brief-with-frontmatter.md")
-if [[ "$result" == *"## Task Brief"* ]] && [[ "$result" != *"mode: subagent"* ]]; then
-	pass "B1 full brief appended with frontmatter stripped"
+if [[ "$result" == *"<summary>Full task brief and audit context</summary>"* ]] && [[ "$result" == *"## Task Brief"* ]] && [[ "$result" != *"mode: subagent"* ]] && [[ "$result" != *"# t9003: brief with frontmatter"* ]]; then
+	pass "B1 full brief collapsed with frontmatter and duplicate title stripped"
 else
 	fail "B1 frontmatter strip + append" \
-		"expected '## Task Brief' present and 'mode: subagent' absent"
+		"expected collapsed Task Brief without frontmatter or duplicate title"
 fi
 
 # Test B2: central brief workflow reference is appended once
 result=$(_compose_issue_brief_workflow_reference "base body")
-if [[ "$result" == *"## Brief Workflow"* ]] && [[ "$result" == *".agents/workflows/brief.md"* ]]; then
-	pass "B2 brief workflow reference appended"
+if [[ "$result" == *"<summary>Brief workflow contract</summary>"* ]] && [[ "$result" == *"## Brief Workflow"* ]] && [[ "$result" == *".agents/workflows/brief.md"* ]]; then
+	pass "B2 brief workflow reference appended behind a collapsed summary"
 else
 	fail "B2 brief workflow reference" \
-		"expected Brief Workflow section with .agents/workflows/brief.md pointer"
+		"expected collapsed Brief Workflow section with .agents/workflows/brief.md pointer"
 fi
 
 result=$(_compose_issue_brief_workflow_reference "$result")
@@ -350,6 +350,28 @@ if [[ "$case_count" == "1" ]]; then
 else
 	fail "B3 brief workflow reference idempotency" \
 		"expected one Brief Workflow section, got $case_count"
+fi
+
+# Test B4: promoted How content appears once in the composed raw body
+promoted_body=$(_compose_issue_worker_guidance "base body" "$TMP/brief-schema-v2.md")
+result=$(_compose_issue_brief "$promoted_body" "$TMP/brief-schema-v2.md")
+files_heading_count=$(printf '%s\n' "$result" | awk '/^### Files to Modify$/ {n++} END {print n+0}')
+criterion_count=$(printf '%s\n' "$result" | awk '/Readers observe one complete state record\./ {n++} END {print n+0}')
+readiness_output=$("$READINESS_HELPER" check --body "$result")
+readiness_rc=$?
+if [[ "$files_heading_count" == "1" ]] && [[ "$criterion_count" == "1" ]] && [[ "$result" != *"## Acceptance Criteria"* ]] && [[ "$result" == *"<summary>Worker implementation contract</summary>"* ]] && [[ "$result" == *"<summary>Full task brief and audit context</summary>"* ]] && [[ $readiness_rc -eq 0 ]] && [[ "$readiness_output" == *"WORKER_READY=true"* ]]; then
+	pass "B4 promoted implementation and completion contracts are not duplicated"
+else
+	fail "B4 promoted contract deduplication and readiness" \
+		"expected one implementation heading, one criterion, no duplicate acceptance heading, and worker-ready output; files=$files_heading_count criteria=$criterion_count readiness=$readiness_rc output=$readiness_output"
+fi
+
+# Test B5: generated TODO descriptions use a reader-first Outcome heading
+result=$(_compose_issue_content "metadata" "Change the rendered body." "" "" "")
+if [[ "$result" == *"## Outcome"* ]] && [[ "$result" != *"## Description"* ]]; then
+	pass "B5 generated issue content uses Outcome instead of Description"
+else
+	fail "B5 reader-first issue outcome" "expected Outcome heading without Description"
 fi
 
 # =============================================================================
@@ -479,6 +501,13 @@ export PATH
 source "$HELPER" >/dev/null 2>&1 || true
 PATH="$STUB_BIN:$PATH"
 export PATH
+
+# This test owns enrich classification, not the shared public-write guard.
+# Keep edits observable through the gh stub without requiring live repo state.
+gh_issue_edit_safe() {
+	gh issue edit "$@"
+	return $?
+}
 
 # Setup for Class D tests — simulate PROJECT_ROOT + brief paths
 D_REPO_ROOT="$TMP/drepo"

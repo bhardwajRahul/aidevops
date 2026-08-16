@@ -124,7 +124,17 @@ brief unless that brief has been migrated to this complete contract.
 
 ## Core Rule
 
-**The brief IS the product.** A vague brief wastes high-capability reasoning, while a mechanically complete brief can run reliably at a lower workload tier. Invest the effort in decision-relevant context, not question or token quotas.
+**The executable contract is the product.** A vague brief wastes high-capability reasoning, while a mechanically complete brief can run reliably at a lower workload tier. Invest in decision-relevant context, not length, repetition, question quotas, or token quotas.
+
+### Reader-first rendering
+
+Rendered GitHub content serves people and workers from the same source:
+
+1. Put the outcome, reason, and completion conditions in the initial reading path.
+2. State each full fact or section once; a short reader summary may index the detailed contract.
+3. Collapse long implementation, provenance, and audit sections instead of deleting them.
+4. Preserve exact paths, commands, constraints, hazards, recovery steps, and acceptance criteria under stable headings in the raw body.
+5. Humanise surrounding prose, not technical identifiers or verification evidence.
 
 For maintained repositories, publishing a worker-ready implementation issue is
 the decision to implement it. Add `auto-dispatch` at creation and do not ask for
