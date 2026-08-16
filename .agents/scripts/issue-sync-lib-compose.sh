@@ -599,14 +599,18 @@ _compose_issue_brief() {
 
 	local brief_content
 	local drop_promoted_how=0
+	local drop_promoted_acceptance=0
 	[[ "$body" == *"## Worker Guidance"* ]] && drop_promoted_how=1
-	brief_content=$(awk -v drop_how="$drop_promoted_how" '
+	[[ "$body" == *"## Done when"* ]] && drop_promoted_acceptance=1
+	brief_content=$(awk -v drop_how="$drop_promoted_how" -v drop_acceptance="$drop_promoted_acceptance" '
 		BEGIN { in_front=0; front_done=0 }
 		/^---$/ && !front_done { in_front=!in_front; if(!in_front) front_done=1; next }
 		!in_front && /^# / { next }
 		!in_front && drop_how == 1 && /^## How([[:space:](]|$)/ { in_how=1; next }
 		!in_front && in_how && /^## / { in_how=0 }
-		!in_front && !in_how { print }
+		!in_front && drop_acceptance == 1 && /^## Acceptance [Cc]riteria[[:space:]]*$/ { in_acceptance=1; next }
+		!in_front && in_acceptance && /^## / { in_acceptance=0 }
+		!in_front && !in_how && !in_acceptance { print }
 	' "$brief_file")
 
 	if [[ -n "$brief_content" && ${#brief_content} -gt 10 ]]; then

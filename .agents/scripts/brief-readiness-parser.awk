@@ -47,7 +47,9 @@ BEGIN {
 
 mode == "unfenced" {
 	if (update_fence($0)) next
-	if (!in_fence) print
+	line = $0
+	if (tolower(line) ~ /^## done when[[:space:]]*$/) line = "## Acceptance Criteria"
+	if (!in_fence) print line
 	next
 }
 
@@ -75,6 +77,7 @@ mode == "visible" {
 		}
 		break
 	}
+	if (tolower(line) ~ /^## done when[[:space:]]*$/) line = "## Acceptance Criteria"
 	if (length(line) > 0) print line
 	next
 }

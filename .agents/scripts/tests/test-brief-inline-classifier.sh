@@ -356,11 +356,14 @@ fi
 promoted_body=$(_compose_issue_worker_guidance "base body" "$TMP/brief-schema-v2.md")
 result=$(_compose_issue_brief "$promoted_body" "$TMP/brief-schema-v2.md")
 files_heading_count=$(printf '%s\n' "$result" | awk '/^### Files to Modify$/ {n++} END {print n+0}')
-if [[ "$files_heading_count" == "1" ]] && [[ "$result" == *"<summary>Worker implementation contract</summary>"* ]] && [[ "$result" == *"<summary>Full task brief and audit context</summary>"* ]]; then
-	pass "B4 promoted implementation contract is not duplicated in the full brief"
+criterion_count=$(printf '%s\n' "$result" | awk '/Readers observe one complete state record\./ {n++} END {print n+0}')
+readiness_output=$("$READINESS_HELPER" check --body "$result")
+readiness_rc=$?
+if [[ "$files_heading_count" == "1" ]] && [[ "$criterion_count" == "1" ]] && [[ "$result" != *"## Acceptance Criteria"* ]] && [[ "$result" == *"<summary>Worker implementation contract</summary>"* ]] && [[ "$result" == *"<summary>Full task brief and audit context</summary>"* ]] && [[ $readiness_rc -eq 0 ]] && [[ "$readiness_output" == *"WORKER_READY=true"* ]]; then
+	pass "B4 promoted implementation and completion contracts are not duplicated"
 else
-	fail "B4 promoted contract deduplication" \
-		"expected one Files to Modify heading across collapsed worker and full brief sections, got $files_heading_count"
+	fail "B4 promoted contract deduplication and readiness" \
+		"expected one implementation heading, one criterion, no duplicate acceptance heading, and worker-ready output; files=$files_heading_count criteria=$criterion_count readiness=$readiness_rc output=$readiness_output"
 fi
 
 # Test B5: generated TODO descriptions use a reader-first Outcome heading

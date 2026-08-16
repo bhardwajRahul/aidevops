@@ -449,6 +449,9 @@ ${BODY_V2_COMPLETE}
 
 </details>"
 
+BODY_V2_DONE_WHEN=$(printf '%s\n' "$BODY_V2_COMPLETE" | sed \
+	-e 's/^## Acceptance Criteria$/## Done when/')
+
 # Short concrete paths remain substantive, and Bun is a supported verifier.
 # shellcheck disable=SC2016
 BODY_V2_SHORT_PATH_BUN=$(printf '%s\n' "$BODY_V2_COMPLETE" | sed \
@@ -860,6 +863,15 @@ if [[ $rc -eq 0 && "$output" == *"WORKER_READY=true"* && "$output" == *"VALIDATI
 	pass "T32: collapsed worker contract remains schema-v2 ready"
 else
 	fail "T32: collapsed worker contract readiness" "got exit $rc, output: $output"
+fi
+
+# --- Test 33: reader-facing Done when is accepted as the criteria contract ---
+output=$("$HELPER" check --body "$BODY_V2_DONE_WHEN")
+rc=$?
+if [[ $rc -eq 0 && "$output" == *"WORKER_READY=true"* && "$output" == *"VALIDATION_ERRORS=none"* ]]; then
+	pass "T33: Done when remains schema-v2 ready"
+else
+	fail "T33: Done when readiness alias" "got exit $rc, output: $output"
 fi
 
 # ---------------------------------------------------------------------------
