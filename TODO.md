@@ -1279,7 +1279,7 @@ t193,setup.sh fails in non-interactive supervisor deploy step,,bugfix|setup,1h,4
 
 - [x] t18243 Complete the privacy-safe marketing optimization contract #bug #interactive #auto-dispatch ~11h tier:thinking ref:GH#30275 logged:2026-08-15 started:2026-08-15 pr:#30282 completed:2026-08-15
 
-- [ ] t18244 Make generated writing and GitHub briefs reader-first #content #documentation #feat #publication:pending ref:GH#30305
+- [x] t18244 Make generated writing and GitHub briefs reader-first #content #documentation #feat ref:GH#30305 pr:#30306 completed:2026-08-16
 
 ## In Progress
 
