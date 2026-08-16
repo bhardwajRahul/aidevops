@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.268] - 2026-08-16
+
+### Changed
+
+- Performance: optimize pulse event classification
+
 ## [3.32.267] - 2026-08-16
 
 ### Changed
