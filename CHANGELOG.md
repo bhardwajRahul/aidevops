@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.266] - 2026-08-16
+
+### Fixed
+
+- deduplicate promoted completion criteria
+- make generated briefs reader-first
+
 ## [3.32.265] - 2026-08-15
 
 ### Added
