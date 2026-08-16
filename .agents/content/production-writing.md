@@ -24,7 +24,7 @@ model: standard
 - **Hook-first in every format** -- First line/sentence/second must hook
 - **8-second dialogue chunks** for AI video -- Longer blocks cause unnatural pacing
 - **Platform-native voice** -- No cross-posting smell (each platform has distinct expectations)
-- **One CTA per piece** -- Clarity beats comprehensiveness
+- **At most one genuine CTA** -- Omit it when no action is useful
 - **Scene-by-scene for video** -- Include B-roll directions, not just dialogue
 
 <!-- AI-CONTEXT-END -->
@@ -33,7 +33,7 @@ model: standard
 
 Before generating any content:
 
-1. What is the one thing the reader should do after reading this?
+1. What should the reader understand, decide, or do? Do not invent an action.
 2. Is value front-loaded -- useful from the first paragraph alone?
 3. Is every section earning its place, or padding?
 4. Does the tone match the context deliberately, not by default?
@@ -65,8 +65,8 @@ Target: 8-15 min (1,200-2,200 words); example timeline below runs ~11 min. Every
 ## SCENE 4: [Proof/Examples] (8:00-10:00)
 [Narration]  [Visual: ...]
 
-## CTA (10:00-10:30)
-[Soft sell -- natural transition from content]
+## CTA (optional, 10:00-10:30)
+[If useful: soft sell -- natural transition from content]
 [Visual: end screen, subscribe animation]
 
 ## END SCREEN (10:30-11:00)
@@ -83,7 +83,7 @@ Target: 30-60 sec (75-150 words). Hook in first 1-3 seconds. Fast cuts (1-3s per
 [Setup -- 5-12 seconds]
 [Payoff -- 10-20 seconds]
 [Twist or reinforcement -- 5-10 seconds]
-[CTA -- 3 seconds]
+[Optional CTA -- 3 seconds, only when the piece has a genuine next action]
 
 CAPTION: [Full text for silent viewers]
 SOUND: [Mood/genre suggestion]
@@ -94,7 +94,7 @@ CUTS: [Cut timing -- e.g., "cut every 1.5s"]
 
 #### X (Twitter)
 
-**Thread**: POST 1 (HOOK, under 280 chars, standalone value) → POST 2 (expand) → POST 3-7 (one point per post, each standalone) → POST 8 (CTA: follow, bookmark, reply).
+**Thread**: POST 1 (HOOK, under 280 chars, standalone value) → POST 2 (expand) → POST 3-7 (one point per post, each standalone) → final post (genuine CTA or final useful point).
 
 **Single post**: Under 280 chars. Front-load value. Personality-forward.
 
@@ -109,7 +109,7 @@ Target: 1,200-1,500 characters. Professional but not corporate.
 
 [Key takeaway -- one sentence]
 
-[CTA -- question or invitation to discuss]
+[Optional CTA -- a genuine question or useful next action]
 
 #hashtag1 #hashtag2 #hashtag3
 ```
@@ -129,7 +129,7 @@ Body:
 
 ### Blog Draft
 
-**SEO rules**: Target keyword in H1, first paragraph, and 1-2 H2s. 1,500-2,500 words. 3-5 internal links. Meta title under 60 chars (keyword-front-loaded). Meta description under 155 chars with CTA.
+**SEO rules**: Target keyword in H1, first paragraph, and 1-2 H2s. 1,500-2,500 words. 3-5 internal links. Meta title under 60 chars (keyword-front-loaded). Meta description under 155 chars with clear value; add a CTA only when useful.
 
 ```text
 # [H1 -- Target keyword, under 60 chars]
@@ -151,8 +151,8 @@ Body:
 - [Bullet 2]
 - [Bullet 3]
 
-## [CTA Section]
-[Natural transition to offer/next step]
+## [Optional CTA Section]
+[Include only when there is a useful offer or next step]
 ```
 
 ### Email Copy
@@ -167,7 +167,7 @@ PREVIEW: [Under 90 chars -- extends the subject line]
 
 [Body -- single narrative thread]
 
-[CTA -- one clear action, button or link]
+[Optional CTA -- one clear action, button, or link when the email needs one]
 
 P.S. [Secondary hook or bonus value]
 ```
@@ -205,7 +205,7 @@ EMAIL 5 (Day 7): Last chance + FAQ
 
 ## OUTRO (15:00-16:00)
 - [Summary -- one sentence]
-- [CTA -- subscribe, review, share]
+- [Optional CTA -- subscribe, review, or share when useful]
 - [Next episode tease]
 
 ## SHOW NOTES
@@ -231,7 +231,7 @@ EMAIL 5 (Day 7): Last chance + FAQ
 
 - [ ] Hook in first line/sentence
 - [ ] Voice matches platform (see table above)
-- [ ] Single clear CTA
+- [ ] At most one useful CTA; omitted when no action is needed
 - [ ] Platform-native language (no cross-posting smell)
 - [ ] Video: dialogue chunks under 8s, captions included, B-roll directions present
 - [ ] Blog: SEO elements present (meta title, description, keywords)

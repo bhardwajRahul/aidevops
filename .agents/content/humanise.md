@@ -29,6 +29,13 @@ Avoiding AI patterns is half the job. Sterile, voiceless writing is as obvious a
 
 **Soulless signs:** uniform sentence length, no opinions, no uncertainty, no first-person, no humour, reads like a press release. **Fix:** Have opinions. Vary rhythm. Acknowledge mixed feelings. Use "I" when it fits. Be specific. Let some mess in.
 
+### Evidence for a known voice
+
+- Prefer explicit corrections and approved before/after edits.
+- Use current published copy as supporting evidence; treat older copy cautiously.
+- Do not infer public voice from hurried prompts, punctuation, or chat formatting.
+- Humanise the prose, not technical facts, identifiers, or verification steps.
+
 ## Patterns
 
 Format: **#. Name** — *trigger words* — problem — fix.
