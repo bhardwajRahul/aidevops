@@ -1021,19 +1021,27 @@ output_results() {
 run_actuation() {
 	local since_ms="$1"
 	_actuation_fingerprints='[]'
+	_actuation_status="healthy"
 	[[ "$_create_issues" == true ]] || return 0
 	[[ "$_dry_run" != true ]] || return 0
 	[[ -x "$ACTUATION_HELPER" && -f "$REPOS_JSON" ]] || return 1
 
 	local known_fingerprints='[]'
 	known_fingerprints=$(state_existing_json | jq -c '.fingerprints // []') || known_fingerprints='[]'
-	local framework_path="" framework_signals="" result="" receipts='[]'
-	framework_path=$(jq -r '
+	local framework_entry='{}' framework_path="" framework_slug="" framework_signals="" result="" receipts='[]'
+	framework_entry=$(jq -c '
 		[.initialized_repos[]? | select(.slug == "marcusquinn/aidevops" and .role == "maintainer")]
-		| if length == 1 then .[0].path // "" else "" end
-	' "$REPOS_JSON" 2>/dev/null) || framework_path=""
+		| if length == 1 then .[0] else {} end
+	' "$REPOS_JSON" 2>/dev/null) || framework_entry='{}'
+	framework_path=$(printf '%s' "$framework_entry" | jq -r '.path // ""') || framework_path=""
+	framework_slug=$(printf '%s' "$framework_entry" | jq -r '.slug // ""') || framework_slug=""
+	if [[ -z "$framework_slug" ]]; then
+		_actuation_status="skipped_no_framework_registration"
+		_counts_json=$(printf '%s' "$_counts_json" | jq -c '.actuated = 0') || return 1
+		return 0
+	fi
 	[[ -n "$framework_path" && -d "$framework_path" ]] || return 1
-	framework_signals=$(run_repo_scoped_pipeline "$_db_path" "$framework_path" "marcusquinn/aidevops" "$since_ms") || return 1
+	framework_signals=$(run_repo_scoped_pipeline "$_db_path" "$framework_path" "$framework_slug" "$since_ms") || return 1
 	validate_compressed_metadata "$framework_signals" "$since_ms" || return 1
 	result=$("$ACTUATION_HELPER" maintainer --signals "$framework_signals" --repos "$REPOS_JSON" \
 		--known-fingerprints "$known_fingerprints") || return 1
@@ -1145,6 +1153,7 @@ main() {
 	_counts_json=""
 	_new_watermark_ms=""
 	_actuation_fingerprints='[]'
+	_actuation_status="healthy"
 
 	# Run extraction + compression pipeline
 	run_pipeline "$db_path" "$since_ms" || {
@@ -1173,7 +1182,7 @@ main() {
 		duration=$((ended_epoch - started_epoch))
 		[[ "$duration" -ge 0 ]] || duration=0
 		[[ -n "$watermark" ]] || watermark="$since_ms"
-		state_write healthy "" "$duration" "$_counts_json" "$watermark" "$_actuation_fingerprints" true || return 1
+		state_write "$_actuation_status" "" "$duration" "$_counts_json" "$watermark" "$_actuation_fingerprints" true || return 1
 	fi
 
 	cleanup_old_pulses
