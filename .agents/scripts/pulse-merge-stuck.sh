@@ -59,6 +59,8 @@ _PULSE_MERGE_STUCK_LOADED=1
 # (test harness, pulse-merge-routine.sh) the pulse-wrapper.sh bootstrap has
 # NOT run; guard each bare var so set -u does not abort.
 : "${LOGFILE:=${HOME}/.aidevops/logs/pulse.log}"
+_PMS_HOLD_FOR_REVIEW_LABEL="hold-for-review"
+_PMS_LABELS_CSV_JQ='[.labels[]?.name] | join(",")'
 
 # Source the pulse-stats helper for gauge/counter writes.
 _PULSE_MERGE_STUCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -202,7 +204,7 @@ _pms_is_eligible_stuck() {
 	mergeable=$(printf '%s' "$pr_obj" | jq -r '.mergeable // "UNKNOWN"' 2>/dev/null)
 	review_decision=$(printf '%s' "$pr_obj" | jq -r '.reviewDecision // ""' 2>/dev/null)
 	is_draft=$(printf '%s' "$pr_obj" | jq -r '.isDraft // false' 2>/dev/null)
-	labels=$(printf '%s' "$pr_obj" | jq -r '[.labels[].name] | join(",")' 2>/dev/null)
+	labels=$(printf '%s' "$pr_obj" | jq -r "$_PMS_LABELS_CSV_JQ" 2>/dev/null)
 
 	# Skip drafts unconditionally
 	[[ "$is_draft" == "true" ]] && {
@@ -210,7 +212,7 @@ _pms_is_eligible_stuck() {
 		return 0
 	}
 	# Skip hold-for-review opt-out
-	[[ "$labels" == *"hold-for-review"* ]] && {
+	[[ "$labels" == *"$_PMS_HOLD_FOR_REVIEW_LABEL"* ]] && {
 		printf '0'
 		return 0
 	}
@@ -236,6 +238,75 @@ _pms_is_eligible_stuck() {
 		fi
 	fi
 	printf '0'
+	return 0
+}
+
+#######################################
+# Check whether a PR belongs in shared failure-fingerprint grouping.
+# Individual escalation remains governed by _pms_is_eligible_stuck; this wider
+# diagnostic set also admits worker-owned CHANGES_REQUESTED PRs so a shared
+# broken-base failure is visible without weakening the review block.
+# Args: $1 = compact enriched PR JSON object
+# Echoes "1" when eligible for pattern grouping, otherwise "0".
+#######################################
+_pms_is_pattern_outage_candidate() {
+	local pr_obj="$1"
+	local is_draft labels review_decision is_stuck
+	is_draft=$(printf '%s' "$pr_obj" | jq -r '.isDraft // false' 2>/dev/null)
+	labels=$(printf '%s' "$pr_obj" | jq -r "$_PMS_LABELS_CSV_JQ" 2>/dev/null)
+	review_decision=$(printf '%s' "$pr_obj" | jq -r '.reviewDecision // ""' 2>/dev/null)
+
+	if [[ "$is_draft" == "true" || "$labels" == *"$_PMS_HOLD_FOR_REVIEW_LABEL"* ]]; then
+		printf '0'
+		return 0
+	fi
+	is_stuck=$(_pms_is_eligible_stuck "$pr_obj")
+	if [[ "$is_stuck" == "1" ]]; then
+		printf '1'
+		return 0
+	fi
+	if [[ "$review_decision" == "CHANGES_REQUESTED" ]] && {
+		[[ ",$labels," == *",origin:worker,"* ]] ||
+			[[ ",$labels," == *",origin:worker-takeover,"* ]]
+	}; then
+		printf '1'
+		return 0
+	fi
+	printf '0'
+	return 0
+}
+
+#######################################
+# Collect aged PR numbers used only for pattern-outage fingerprinting.
+# Args: $1=PR JSON, $2=count, $3=now epoch, $4=age threshold seconds
+# Stdout: newline-separated PR numbers. Returns 1 when the diagnostic budget
+# expires so the caller can defer an incomplete aggregate without affecting
+# the already-complete individual escalation pass.
+#######################################
+_pms_collect_pattern_outage_candidates() {
+	local pr_json="$1"
+	local pr_count="$2"
+	local now_epoch="$3"
+	local age_threshold_secs="$4"
+	local i=0 pr_obj="" pr_num="" pr_updated="" pr_updated_epoch=0 pr_age_secs=0 is_candidate=""
+
+	while [[ "$i" -lt "$pr_count" ]]; do
+		_pms_diagnostic_budget_exhausted && return 1
+		pr_obj=$(printf '%s' "$pr_json" | jq -c ".[$i]" 2>/dev/null)
+		i=$((i + 1))
+		[[ -n "$pr_obj" ]] || continue
+		is_candidate=$(_pms_is_pattern_outage_candidate "$pr_obj")
+		[[ "$is_candidate" == "1" ]] || continue
+		pr_num=$(printf '%s' "$pr_obj" | jq -r '.number // empty' 2>/dev/null)
+		pr_updated=$(printf '%s' "$pr_obj" | jq -r '.updatedAt // empty' 2>/dev/null)
+		[[ "$pr_num" =~ ^[0-9]+$ && -n "$pr_updated" ]] || continue
+		pr_updated_epoch=$(_pms_iso_to_epoch "$pr_updated")
+		[[ "$pr_updated_epoch" =~ ^[1-9][0-9]*$ ]] || continue
+		pr_age_secs=$((now_epoch - pr_updated_epoch))
+		[[ "$pr_age_secs" -ge "$age_threshold_secs" ]] || continue
+		printf '%s\n' "$pr_num"
+	done
+	_pms_diagnostic_budget_exhausted && return 1
 	return 0
 }
 
@@ -377,7 +448,7 @@ _classify_stuck_pr() {
 
 	local mergeable="" labels="" head_sha="" check_runs=""
 	mergeable=$(printf '%s' "$pr_meta" | jq -r '.mergeable // "UNKNOWN"' 2>/dev/null)
-	labels=$(printf '%s' "$pr_meta" | jq -r '[.labels[].name] | join(",")' 2>/dev/null)
+	labels=$(printf '%s' "$pr_meta" | jq -r "$_PMS_LABELS_CSV_JQ" 2>/dev/null)
 	head_sha=$(_pms_head_sha_from_pr_json "$pr_meta")
 	check_runs=$(_pms_check_runs_for_head "$repo_slug" "$head_sha")
 
@@ -754,6 +825,10 @@ _detect_pattern_outage() {
 
 	while IFS= read -r pr_num; do
 		[[ -n "$pr_num" ]] || continue
+		if _pms_diagnostic_budget_exhausted; then
+			echo "[pulse-merge-stuck] _detect_pattern_outage: diagnostic budget exhausted for ${repo_slug}; aggregate deferred" >>"$LOGFILE"
+			return 0
+		fi
 		local fp head_sha=""
 		if [[ -n "$pr_json" ]]; then
 			head_sha=$(printf '%s' "$pr_json" | jq -r --argjson number "$pr_num" '.[] | select(.number == $number) | .headRefOid // empty' 2>/dev/null) || head_sha=""
@@ -1710,9 +1785,18 @@ pulse_merge_stuck_run_pass() {
 			"$saturation_blocked_prs" "$saturation_blocked_count" || true
 	fi
 
-	# Pattern-cluster detector over the full stuck set.
-	if [[ "$eligible_stuck_count" -ge "$AIDEVOPS_MERGE_PATTERN_MIN_PRS" ]]; then
-		_detect_pattern_outage "$repo_slug" "$(printf '%b' "$stuck_pr_numbers")" "$pr_json" || true
+	# Pattern clustering has a wider diagnostic candidate set than individual
+	# escalation: worker-owned CHANGES_REQUESTED PRs remain review-blocked but
+	# can still reveal a shared broken-base CI fingerprint.
+	local pattern_pr_numbers="" pattern_pr_count=0
+	if pattern_pr_numbers=$(_pms_collect_pattern_outage_candidates \
+		"$pr_json" "$pr_count" "$now_epoch" "$age_threshold_secs"); then
+		pattern_pr_count=$(printf '%s\n' "$pattern_pr_numbers" | grep -cE '^[0-9]+$' || true)
+		if [[ "$pattern_pr_count" -ge "$AIDEVOPS_MERGE_PATTERN_MIN_PRS" ]]; then
+			_detect_pattern_outage "$repo_slug" "$pattern_pr_numbers" "$pr_json" || true
+		fi
+	else
+		echo "[pulse-merge-stuck] pulse_merge_stuck_run_pass: ${repo_slug} — pattern candidate collection exceeded the diagnostic budget; aggregate deferred" >>"$LOGFILE"
 	fi
 
 	echo "[pulse-merge-stuck] pulse_merge_stuck_run_pass: ${repo_slug} — eligible_stuck=${eligible_stuck_count}, threshold=${AIDEVOPS_MERGE_STUCK_AGE_MINUTES}m, saturated=${is_saturated} (provider_incident=${provider_incident}, queued=${sat_queued}, in_progress=${sat_in_progress}, ratio=${sat_ratio}, blocked_by_saturation=${saturation_blocked_count})" >>"$LOGFILE"
