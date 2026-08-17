@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.271] - 2026-08-17
+
+### Changed
+
+- Documentation: clarify OpenCode Bash tool restrictions
+
+### Fixed
+
+- serialize Dependabot worker intake
+- fail CI repair test on missing merge helper (#30369)
+- route session miner actuation by framework marker
+- qualify brief template references
+- stop approval batches on shared outages
+
 ## [3.32.270] - 2026-08-17
 
 ### Changed
