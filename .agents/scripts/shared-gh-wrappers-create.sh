@@ -571,7 +571,12 @@ gh_create_issue() {
 	local issue_output rc auto_assignee="" target_repo=""
 	target_repo=$(_gh_extract_repo_from_args "$@" 2>/dev/null || true)
 	if ! _gh_wrapper_args_have_assignee "$@"; then
-		if _gh_wrapper_args_have_label "$_GH_CREATE_AUTO_DISPATCH_LABEL" "$@"; then
+		if [[ "${AIDEVOPS_GH_SKIP_AUTO_ASSIGNMENT:-0}" == 1 ]]; then
+			# GH#30325: pending publication withholds auto-dispatch from the
+			# issue, so trusted callers pass the original ownership intent
+			# separately for the shared GraphQL/REST creation path.
+			print_info "[INFO] caller ownership policy skips self-assignment"
+		elif _gh_wrapper_args_have_label "$_GH_CREATE_AUTO_DISPATCH_LABEL" "$@"; then
 			# t2157/t2406: auto-dispatch means worker-owned; skip self-assignment.
 			print_info "[INFO] auto-dispatch label present — skipping self-assignment per t2157"
 		else

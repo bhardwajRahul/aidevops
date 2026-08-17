@@ -519,12 +519,11 @@ _todo_commit_push_inner() {
 
 	current_branch=$(_todo_current_branch "$repo_path")
 	default_branch=$(_todo_default_branch "$repo_path")
-	if [[ -n "$current_branch" && -n "$default_branch" && "$current_branch" == "$default_branch" ]]; then
-		if _todo_branch_requires_planning_pr "$repo_path" "$default_branch"; then
-			printf '%s\n' "[todo_commit_push] Default branch ${default_branch} requires PR publication for planning files" >>"$log_target"
-			_todo_create_planning_pr "$repo_path" "$commit_msg" "$files" "$current_branch" "$default_branch" "$log_target"
-			return $?
-		fi
+	if [[ -n "$current_branch" && -n "$default_branch" ]] &&
+		_todo_branch_requires_planning_pr "$repo_path" "$default_branch"; then
+		printf '%s\n' "[todo_commit_push] Default branch ${default_branch} requires PR publication for planning files" >>"$log_target"
+		_todo_create_planning_pr "$repo_path" "$commit_msg" "$files" "$current_branch" "$default_branch" "$log_target"
+		return $?
 	fi
 
 	current_branch=$(_todo_current_branch "$repo_path")

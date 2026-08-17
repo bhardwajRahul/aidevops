@@ -102,6 +102,14 @@ export AIDEVOPS_GH_REST_FALLBACK_DISABLE_CACHE=1
 # shellcheck source=../shared-constants.sh
 source "${SCRIPTS_DIR}/shared-constants.sh" >/dev/null 2>&1 || true
 
+_gh_collaborator_permission_lookup() {
+	local _repo_slug="$1"
+	local _username="$2"
+	local out_var="$3"
+	printf -v "$out_var" '%s' "write"
+	return 0
+}
+
 # Re-override print_info AFTER sourcing to restore our capturing stub.
 # shellcheck disable=SC2317
 print_info() { printf '[INFO] %s\n' "$*" >>"${GH_INFO_OUTPUT}"; return 0; }
@@ -143,6 +151,10 @@ gh() {
 	# User endpoint — for _gh_wrapper_auto_assignee
 	if [[ "$1" == "api" && "$2" == "user" ]]; then
 		printf '"testuser"\n'
+		return 0
+	fi
+	if [[ "$1" == "api" && "$2" == "repos/owner/repo" ]]; then
+		printf 'false\n'
 		return 0
 	fi
 
@@ -194,6 +206,25 @@ if grep -qE '^api.*-X POST.*/repos/owner/repo/issues' "$GH_CALLS" 2>/dev/null; t
 else
 	fail "gh_create_issue routes to REST when GraphQL exhausted (issue create path)" \
 		"expected 'api -X POST /repos/owner/repo/issues' in GH_CALLS; got: $(cat "$GH_CALLS")"
+fi
+
+# The pre-creation ownership policy is transport-independent: the REST fallback
+# must not add an assignee when pending publication hides auto-dispatch.
+: >"$GH_CALLS"
+AIDEVOPS_SESSION_ORIGIN=interactive AIDEVOPS_GH_SKIP_AUTO_ASSIGNMENT=1 \
+	STUB_PRIMARY_FAIL=1 STUB_RATE_LIMIT_REMAINING=0 _GH_SHOULD_FALLBACK_OVERRIDE=1 \
+	gh_create_issue \
+		--repo "owner/repo" \
+		--title "t9991: pending rest-routing test" \
+		--body "test body" \
+		--label "bug,publication:pending" >/dev/null 2>&1 || true
+
+if grep -qE '^api.*-X POST.*/repos/owner/repo/issues' "$GH_CALLS" 2>/dev/null &&
+	! grep -q -- 'issue edit .*--add-assignee' "$GH_CALLS" 2>/dev/null; then
+	pass "REST fallback preserves explicit no-assignment ownership policy"
+else
+	fail "REST fallback preserves explicit no-assignment ownership policy" \
+		"expected REST creation without post-create assignment"
 fi
 
 # Test 2: gh_create_issue does NOT call REST when primary succeeds

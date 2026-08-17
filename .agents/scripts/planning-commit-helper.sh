@@ -577,7 +577,7 @@ commit_planning_files() {
 	current_branch=$(git -C "$repo_root" symbolic-ref --short HEAD 2>/dev/null) || return 1
 	local default_branch=""
 	default_branch=$(_todo_default_branch "$repo_root")
-	if [[ "$current_branch" == "$default_branch" ]] && _todo_branch_requires_planning_pr "$repo_root" "$default_branch"; then
+	if _todo_branch_requires_planning_pr "$repo_root" "$default_branch"; then
 		todo_commit_push "$repo_root" "$commit_msg" "TODO.md todo/"
 		local publication_rc=$?
 		[[ "$publication_rc" -eq 0 ]] &&
@@ -587,7 +587,7 @@ commit_planning_files() {
 	local changed_paths=""
 	changed_paths=$(_planning_publish_changed_paths "$repo_root")
 	if AIDEVOPS_PLANNING_WRITE_RECEIPT=true \
-		planning_publish "$repo_root" "$commit_msg" origin "$current_branch" "$changed_paths"; then
+		planning_publish "$repo_root" "$commit_msg" origin "$default_branch" "$changed_paths"; then
 		if [[ "$PLANNING_PUBLISHED_COMMIT" != "$PLANNING_PUBLICATION_SOURCE_HEAD" &&
 			(-z "$PLANNING_PUBLICATION_RECEIPT" || -z "$PLANNING_PUBLICATION_HANDOFF_ID") ]]; then
 			log_error "Planning files reached the remote branch, but no verified checkout-free merge handoff receipt is available"

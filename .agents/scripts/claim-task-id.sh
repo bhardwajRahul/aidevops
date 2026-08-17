@@ -536,6 +536,12 @@ create_github_issue() {
 	local description="$2"
 	local labels="$3"
 	local repo_path="$4"
+	local canonical_labels="$labels"
+	local skip_wrapper_auto_assignment=0
+	if [[ ",${canonical_labels}," == *",auto-dispatch,"* ||
+		",${canonical_labels}," == *",parent-task,"* ]]; then
+		skip_wrapper_auto_assignment=1
+	fi
 
 	cd "$repo_path" || return 1
 
@@ -651,7 +657,8 @@ create_github_issue() {
 	[[ -n "$labels" ]] && create_args+=(--label "$labels")
 
 	local issue_url
-	if ! issue_url=$(gh_create_issue "${create_args[@]}" 2>&1); then
+	if ! issue_url=$(AIDEVOPS_GH_SKIP_AUTO_ASSIGNMENT="$skip_wrapper_auto_assignment" \
+		gh_create_issue "${create_args[@]}" 2>&1); then
 		log_warn "Failed to create GitHub issue: $issue_url"
 		return 1
 	fi
@@ -724,7 +731,7 @@ create_github_issue() {
 	# the TODO entry is never written. This call closes that gap idempotently.
 	# GH#21473: pass $title (one-liner), not $description (full body).
 	if ! _converge_created_issue_ref \
-		"$_task_id_for_todo" "$issue_num" "$title" "$labels" "$repo_path"; then
+		"$_task_id_for_todo" "$issue_num" "$title" "$canonical_labels" "$repo_path"; then
 		log_warn "Created issue #${issue_num}, but failed to persist task mapping for ${_task_id_for_todo}"
 		return 1
 	fi

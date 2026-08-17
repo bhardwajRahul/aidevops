@@ -49,6 +49,7 @@ fail() {
 setup_repo() {
 	local tmpdir="$1"
 	local protected_default="$2"
+	local work_branch="${3:-fixture-default}"
 	local bare_dir="${tmpdir}/remote.git"
 	local local_dir="${tmpdir}/local.git"
 	local work_dir="${tmpdir}/work"
@@ -69,6 +70,9 @@ setup_repo() {
 	git -C "$work_dir" push origin fixture-default >/dev/null 2>&1 || return 1
 	git -C "$work_dir" fetch origin fixture-default >/dev/null 2>&1 || return 1
 	git -C "$work_dir" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/fixture-default >/dev/null 2>&1 || return 1
+	if [[ "$work_branch" != "fixture-default" ]]; then
+		git -C "$work_dir" switch -c "$work_branch" >/dev/null 2>&1 || return 1
+	fi
 
 	if [[ "$protected_default" == "true" ]]; then
 		mkdir -p "${bare_dir}/hooks" || return 1
@@ -105,6 +109,11 @@ set -u
 } >>"${GH_STUB_LOG:?}"
 
 if [[ "${1:-}" == "label" && "${2:-}" == "create" ]]; then
+	exit 0
+fi
+
+if [[ "${1:-}" == "api" && "${2:-}" == "repos/example/repo" ]]; then
+	printf 'false\n'
 	exit 0
 fi
 
@@ -295,6 +304,108 @@ test_unprotected_default_keeps_direct_push() {
 	return 0
 }
 
+test_protected_default_from_linked_branch_creates_planning_pr() {
+	local name="protected default from linked branch creates planning PR"
+	local tmpdir fake_bin work_dir log_file output rc head_branch remote_todo
+	tmpdir=$(mktemp -d) || {
+		fail "$name" "mktemp failed"
+		return 0
+	}
+	fake_bin="${tmpdir}/bin"
+	log_file="${tmpdir}/gh.log"
+	: >"$log_file"
+	write_fake_gh "$fake_bin" || {
+		fail "$name" "fake gh setup failed"
+		return 0
+	}
+	work_dir=$(setup_repo "$tmpdir" true fixture-linked) || {
+		fail "$name" "repo setup failed"
+		return 0
+	}
+	append_planning_change "$work_dir" "t1002" || {
+		fail "$name" "planning change failed"
+		return 0
+	}
+
+	rc=0
+	output=$(cd "$work_dir" && PATH="${fake_bin}:$PATH" \
+		GH_STUB_LOG="$log_file" GH_STUB_BODY="${tmpdir}/body" GH_STUB_HEAD="${tmpdir}/head" GH_STUB_TITLE="${tmpdir}/title" \
+		AIDEVOPS_PLANNING_FORCE_PR_FALLBACK=1 AIDEVOPS_PLANNING_PR_REPO_SLUG="example/repo" \
+		"$PLANNING_HELPER" "plan: add t1002 linked protected planning" 2>&1) || rc=$?
+	if [[ $rc -ne 0 || "$output" != *"AIDEVOPS_PLANNING_COMMIT_RESULT=pr"* ]]; then
+		fail "$name" "helper failed or omitted PR result rc=$rc output=$output"
+		return 0
+	fi
+	head_branch=$(<"${tmpdir}/head")
+	if [[ "$head_branch" != planning/* ]]; then
+		fail "$name" "unexpected PR head: ${head_branch:-<empty>}"
+		return 0
+	fi
+	remote_todo=$(git -C "$work_dir" show "origin/fixture-default:TODO.md" 2>/dev/null || true)
+	if [[ "$remote_todo" == *"t1002"* ]]; then
+		fail "$name" "protected default branch was updated directly"
+		return 0
+	fi
+	if git -C "$work_dir" show-ref --verify --quiet refs/remotes/origin/fixture-linked; then
+		fail "$name" "linked source branch was published instead of a planning PR"
+		return 0
+	fi
+	pass "$name"
+	rm -rf "$tmpdir"
+	return 0
+}
+
+test_unprotected_default_from_linked_branch_publishes_default() {
+	local name="unprotected default from linked branch publishes canonical default"
+	local tmpdir fake_bin work_dir log_file output rc status remote_todo
+	tmpdir=$(mktemp -d) || {
+		fail "$name" "mktemp failed"
+		return 0
+	}
+	fake_bin="${tmpdir}/bin"
+	log_file="${tmpdir}/gh.log"
+	: >"$log_file"
+	write_fake_gh "$fake_bin" || {
+		fail "$name" "fake gh setup failed"
+		return 0
+	}
+	work_dir=$(setup_repo "$tmpdir" false fixture-linked) || {
+		fail "$name" "repo setup failed"
+		return 0
+	}
+	append_planning_change "$work_dir" "t1003" || {
+		fail "$name" "planning change failed"
+		return 0
+	}
+
+	rc=0
+	output=$(cd "$work_dir" && PATH="${fake_bin}:$PATH" \
+		GH_STUB_LOG="$log_file" GH_STUB_BODY="${tmpdir}/body" GH_STUB_HEAD="${tmpdir}/head" GH_STUB_TITLE="${tmpdir}/title" \
+		"$PLANNING_HELPER" "plan: add t1003 linked direct planning" 2>&1) || rc=$?
+	if [[ $rc -ne 0 || "$output" != *"AIDEVOPS_PLANNING_COMMIT_RESULT=direct"* ]]; then
+		fail "$name" "helper failed or omitted direct result rc=$rc output=$output"
+		return 0
+	fi
+	status=$(git -C "$work_dir" status --short 2>/dev/null)
+	if [[ "$status" != *"TODO.md"* || "$status" != *"todo/"* ]]; then
+		fail "$name" "source planning edits were not preserved: $status"
+		return 0
+	fi
+	git -C "$work_dir" fetch origin fixture-default >/dev/null 2>&1 || true
+	remote_todo=$(git -C "$work_dir" show origin/fixture-default:TODO.md 2>/dev/null || true)
+	if [[ "$remote_todo" != *"t1003"* ]]; then
+		fail "$name" "canonical default did not receive linked planning changes"
+		return 0
+	fi
+	if git -C "$work_dir" show-ref --verify --quiet refs/remotes/origin/fixture-linked; then
+		fail "$name" "linked source branch was published instead of canonical default"
+		return 0
+	fi
+	pass "$name"
+	rm -rf "$tmpdir"
+	return 0
+}
+
 test_pr_unavailable_fails_before_commit() {
 	local name="PR fallback unavailable fails before local commit"
 	local tmpdir work_dir before_head after_head output rc status
@@ -347,6 +458,8 @@ main() {
 	fi
 	test_protected_default_creates_planning_pr
 	test_unprotected_default_keeps_direct_push
+	test_protected_default_from_linked_branch_creates_planning_pr
+	test_unprotected_default_from_linked_branch_publishes_default
 	test_pr_unavailable_fails_before_commit
 	printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 	[[ "$FAIL" -eq 0 ]] || return 1
