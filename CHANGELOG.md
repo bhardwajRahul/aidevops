@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.270] - 2026-08-17
+
+### Changed
+
+- Maintenance: publish approval outage hardening tasks
+
+### Fixed
+
+- Route stalled Dependabot PRs to worker intake
+- recover stale worker sessions after DB seed failures
+- validate approval lifecycle GitHub login (#30342)
+- report retained pulse permission blockers (#30332)
+- suppress approved lifecycle audit races (#30330)
+
 ## [3.32.269] - 2026-08-17
 
 ### Changed
