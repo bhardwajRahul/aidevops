@@ -21,6 +21,8 @@ FAIL=0
 ERRORS=""
 STUB_DIR=""
 CREATE_ARGS_FILE=""
+CANONICAL_LABELS_FILE=""
+SKIP_ASSIGNMENT_FILE=""
 
 pass() {
 	local name="$1"
@@ -74,6 +76,8 @@ _setup() {
 	mkdir -p "${STUB_DIR}/repo" "${STUB_DIR}/home/.aidevops/logs"
 	export HOME="${STUB_DIR}/home"
 	CREATE_ARGS_FILE="${STUB_DIR}/create-args.txt"
+	CANONICAL_LABELS_FILE="${STUB_DIR}/canonical-labels.txt"
+	SKIP_ASSIGNMENT_FILE="${STUB_DIR}/skip-assignment.txt"
 
 	# shellcheck disable=SC1090
 	if ! source "$CLAIM_SCRIPT" >/dev/null 2>&1; then
@@ -104,7 +108,18 @@ _setup() {
 	gh_create_issue() {
 		local args="$*"
 		printf '%s\n' "$args" >"$CREATE_ARGS_FILE"
+		printf '%s\n' "${AIDEVOPS_GH_SKIP_AUTO_ASSIGNMENT:-0}" >"$SKIP_ASSIGNMENT_FILE"
 		printf '%s\n' 'https://github.com/owner/repo/issues/12345'
+		return 0
+	}
+
+	_converge_created_issue_ref() {
+		local _task_id="$1"
+		local _issue_num="$2"
+		local _title="$3"
+		local labels="$4"
+		local _repo_path="$5"
+		printf '%s\n' "$labels" >"$CANONICAL_LABELS_FILE"
 		return 0
 	}
 
@@ -144,6 +159,8 @@ run_create() {
 	local state="${2:-pending}"
 	TASK_PUBLICATION_STATE="$state"
 	: >"$CREATE_ARGS_FILE"
+	: >"$CANONICAL_LABELS_FILE"
+	: >"$SKIP_ASSIGNMENT_FILE"
 	create_github_issue "t2789: test default status label" "body" "$labels" "${STUB_DIR}/repo" >/dev/null
 	local create_args=""
 	create_args=$(<"$CREATE_ARGS_FILE")
@@ -157,6 +174,11 @@ args_default=$(run_create 'auto-dispatch,tier:standard,bug')
 assert_contains "pending_blocker_added" "$args_default" '--label tier:standard,bug,publication:pending'
 assert_not_contains "pending_auto_dispatch_withheld" "$args_default" 'auto-dispatch'
 assert_not_contains "pending_status_available_withheld" "$args_default" 'status:available'
+canonical_labels=$(<"$CANONICAL_LABELS_FILE")
+assert_contains "pending_canonical_auto_dispatch_preserved" "$canonical_labels" 'auto-dispatch'
+assert_not_contains "pending_canonical_blocker_not_persisted" "$canonical_labels" 'publication:pending'
+skip_assignment=$(<"$SKIP_ASSIGNMENT_FILE")
+assert_contains "pending_worker_intent_skips_wrapper_assignment" "$skip_assignment" '1'
 
 args_empty=$(run_create '')
 assert_contains "empty_labels_pending_blocker_added" "$args_empty" '--label publication:pending'

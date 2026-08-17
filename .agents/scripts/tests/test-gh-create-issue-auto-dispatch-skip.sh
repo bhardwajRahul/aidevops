@@ -193,6 +193,22 @@ else
 		"expected issue edit --add-assignee after an unassigned create"
 fi
 
+# Pending publication deliberately withholds auto-dispatch from the issue but
+# passes the original worker-owned policy out of band (GH#30325).
+: >"$GH_CALLS"
+AIDEVOPS_GH_SKIP_AUTO_ASSIGNMENT=1 gh_create_issue \
+	--repo "owner/repo" \
+	--title "t9992: pending worker task" \
+	--body "test body" \
+	--label "bug,publication:pending" >/dev/null 2>&1 || true
+
+if ! grep -q -- "issue edit .*--add-assignee" "$GH_CALLS" 2>/dev/null; then
+	pass "explicit worker ownership policy skips post-create assignment"
+else
+	fail "explicit worker ownership policy skips post-create assignment" \
+		"unexpected assignment call when pending labels hide auto-dispatch"
+fi
+
 # =============================================================================
 # Test 3 — auto-dispatch in labels → [INFO] skip message emitted
 # =============================================================================
