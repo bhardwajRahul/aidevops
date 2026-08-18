@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.273] - 2026-08-18
+
+### Changed
+
+- Documentation: add GPUI desktop framework guidance
+
+### Fixed
+
+- preserve Dependabot maintainer holds (#30390)
+
 ## [3.32.272] - 2026-08-18
 
 ### Changed
