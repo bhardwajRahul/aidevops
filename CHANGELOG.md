@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.272] - 2026-08-18
+
+### Changed
+
+- Maintenance: bump @fontsource/dm-mono from 5.2.7 to 5.3.0 (#30379)
+
+### Fixed
+
+- route Dependabot with paginated checks
+- update trusted Hono Dependabot dependency (#30381)
+- complete trusted TypeScript 7 upgrade (#30378)
+- complete @types/bun dependency update
+- trust safe types bun Dependabot updates
+- resolve trusted Dependabot dm-sans intake (#30374)
+
 ## [3.32.271] - 2026-08-17
 
 ### Changed
