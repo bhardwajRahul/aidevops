@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.275] - 2026-08-19
+
+### Changed
+
+- Maintenance: mark t18294 complete (pr:#30352 completed:2026-08-17) (#30347)
+
+### Fixed
+
+- bound unresolved relationship sync retries (#30438)
+- allow trusted issue-sync PR merge (#30436)
+
 ## [3.32.274] - 2026-08-19
 
 ### Fixed
