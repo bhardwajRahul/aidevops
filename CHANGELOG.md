@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.274] - 2026-08-19
+
+### Fixed
+
+- trust Vite React Dependabot update (#30424)
+- retain supported file-type runtime (#30422)
+- trust Elysia Dependabot update (#30420)
+- trust Vite Dependabot review gates (#30418)
+- trust reviewed Actions Dependabot updates (#30391)
+
 ## [3.32.273] - 2026-08-18
 
 ### Changed
