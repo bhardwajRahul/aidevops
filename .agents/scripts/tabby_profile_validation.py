@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 import sys
+from collections.abc import Iterator
 from typing import NamedTuple
 
 from tabby_profile_utils import (
@@ -14,7 +15,9 @@ from tabby_profile_utils import (
     _line_indent_len,
     _normalise_yaml_scalar,
     _profile_block_end,
+    _profile_mentions_opencode_launch,
 )
+from tabby_shell_resolver import is_executable_command
 
 
 class ProfileArgTypeIssue(NamedTuple):
@@ -23,6 +26,31 @@ class ProfileArgTypeIssue(NamedTuple):
     profile_name: str
     line_number: int
     value: str
+
+
+class ProfileCommandIssue(NamedTuple):
+    """A managed OpenCode profile whose command cannot be executed."""
+
+    profile_name: str
+    line_number: int
+    value: str
+
+
+def _profile_ranges(lines: list[str]) -> Iterator[tuple[str, int, int]]:
+    """Yield profile names and bounded line ranges from a Tabby config."""
+    index = 0
+    while index < len(lines):
+        profile_match = re.match(r"^  - name:\s*(?P<name>.+?)\s*$", lines[index])
+        if not profile_match:
+            index += 1
+            continue
+        profile_end = _profile_block_end(lines, index)
+        yield (
+            _normalise_yaml_scalar(profile_match.group("name")),
+            index,
+            profile_end,
+        )
+        index = profile_end
 
 
 def _is_non_string_yaml_list_item(value: str) -> bool:
@@ -101,21 +129,12 @@ def find_profile_arg_type_issues(config_text: str) -> list[ProfileArgTypeIssue]:
     """Find profile args that Tabby cannot pass to its PTY as ``string[]``."""
     lines = config_text.split("\n")
     issues: list[ProfileArgTypeIssue] = []
-    index = 0
-    while index < len(lines):
-        profile_match = re.match(r"^  - name:\s*(?P<name>.+?)\s*$", lines[index])
-        if not profile_match:
-            index += 1
-            continue
-
-        profile_name = _normalise_yaml_scalar(profile_match.group("name"))
-        profile_end = _profile_block_end(lines, index)
+    for profile_name, profile_start, profile_end in _profile_ranges(lines):
         issues.extend(
             _find_profile_arg_type_issues(
-                lines, index, profile_end, profile_name
+                lines, profile_start, profile_end, profile_name
             )
         )
-        index = profile_end
     return issues
 
 
@@ -141,8 +160,57 @@ def report_profile_arg_type_issues(config_text: str) -> bool:
         )
     print(
         "Do not launch the listed profiles. In Tabby's command-line field, paste "
-        "the full quoted /bin/zsh -l -c '<command>' invocation so shell operators "
+        "the full quoted <login-shell> -l -c '<command>' invocation so shell operators "
         "remain inside one string argument.",
         file=sys.stderr,
     )
+    return True
+
+
+def _profile_command_issue(
+    lines: list[str], profile_name: str, profile_start: int, profile_end: int
+) -> ProfileCommandIssue | None:
+    """Return the invalid command issue for one managed profile, if any."""
+    if not _profile_mentions_opencode_launch(lines[profile_start:profile_end]):
+        return None
+    for line_index in range(profile_start + 1, profile_end):
+        command_match = re.match(r"^\s*command:\s*(?P<value>.*)$", lines[line_index])
+        if not command_match:
+            continue
+        command = _normalise_yaml_scalar(command_match.group("value"))
+        if is_executable_command(command):
+            return None
+        return ProfileCommandIssue(profile_name, line_index + 1, command)
+    return None
+
+
+def find_profile_command_issues(config_text: str) -> list[ProfileCommandIssue]:
+    """Find managed OpenCode profiles with an invalid command executable."""
+    lines = config_text.split("\n")
+    issues: list[ProfileCommandIssue] = []
+    for profile_name, profile_start, profile_end in _profile_ranges(lines):
+        issue = _profile_command_issue(
+            lines, profile_name, profile_start, profile_end
+        )
+        if issue is not None:
+            issues.append(issue)
+    return issues
+
+
+def report_profile_command_issues(config_text: str) -> bool:
+    """Print actionable missing-command errors and return whether any exist."""
+    issues = find_profile_command_issues(config_text)
+    if not issues:
+        return False
+    print(
+        "Invalid managed Tabby profile: options.command must be an absolute executable path.",
+        file=sys.stderr,
+    )
+    for issue in issues:
+        value = issue.value or "<empty>"
+        print(
+            f"  - {issue.profile_name}: command {value!r} at line {issue.line_number} is unavailable",
+            file=sys.stderr,
+        )
+    print("Run 'aidevops tabby sync' to repair managed OpenCode profiles.", file=sys.stderr)
     return True
