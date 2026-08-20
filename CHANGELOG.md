@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.278] - 2026-08-20
+
+### Changed
+
+- Documentation: clarify approval versus dispatch readiness
+
+### Fixed
+
+- Fix annotated release tag parsing
+
 ## [3.32.277] - 2026-08-20
 
 ### Added
