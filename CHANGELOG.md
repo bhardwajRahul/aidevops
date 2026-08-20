@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.279] - 2026-08-21
+
+### Changed
+
+- Refactor: reduce agent profile complexity (#30487)
+
+### Fixed
+
+- close superseded Dependabot source PRs
+
 ## [3.32.278] - 2026-08-20
 
 ### Changed
