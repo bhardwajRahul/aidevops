@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.276] - 2026-08-20
+
+### Fixed
+
+- add trust-gated CI repair-only routing
+- ignore commented cross-account inherit examples
+- preserve bounded recovery retention on sizing timeout
+- bound shfmt provisioning (#30451)
+
 ## [3.32.275] - 2026-08-19
 
 ### Changed
