@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.277] - 2026-08-20
+
+### Added
+
+- classify tool outcomes
+- add conversational search-intent evidence guidance
+
+### Fixed
+
+- fix duplicate task completion proof tokens
+- defer consolidation for live claims (#30462)
+
 ## [3.32.276] - 2026-08-20
 
 ### Fixed
