@@ -1397,6 +1397,7 @@ _clean_degraded_visibility_fallback_allowed() {
 	local default_br="$8"
 
 	[[ "${WORKTREE_REMOVAL_GUARD_REASON:-}" == "${_WT_CWD_REASON_DEGRADED:-cwd-visibility-degraded}" ]] || return 1
+	_clean_worktree_index_is_readable "$worktree_path" "$worktree_branch" "$audit_context" || return 1
 	if worktree_has_changes "$worktree_path"; then
 		log_worktree_removal_event "$_WTAR_SKIPPED" "$_WTAR_WH_CALLER" "$worktree_path" "degraded-cwd-dirty-skip" "$_WT_CLEAN_MODE_SKIPPED" "$audit_context"
 		return 1
@@ -1462,6 +1463,21 @@ _clean_remove_recoverably_after_lease() {
 	return 0
 }
 
+_clean_worktree_index_is_readable() {
+	local worktree_path="$1"
+	local worktree_branch="$2"
+	local audit_context="$3"
+
+	if GIT_OPTIONAL_LOCKS=0 git -C "$worktree_path" status --porcelain >/dev/null 2>&1; then
+		return 0
+	fi
+	log_worktree_removal_event "$_WTAR_SKIPPED" "$_WTAR_WH_CALLER" "$worktree_path" \
+		"unreadable-git-state" "$_WT_CLEAN_MODE_SKIPPED" \
+		"branch=${worktree_branch:-detached} $audit_context"
+	echo -e "${YELLOW}Skipped $worktree_branch - Git index/state is unreadable${NC}" >&2
+	return 1
+}
+
 _clean_remove_classified_worktree() {
 	local worktree_path="$1"
 	local worktree_branch="$2"
@@ -1488,11 +1504,14 @@ _clean_remove_classified_worktree() {
 		if [[ "$guard_status" -ne 0 && "$guard_status" -ne "${_WT_CWD_CAPTURE_DEGRADED_RC:-2}" ]]; then
 			return 1
 		fi
+	elif [[ "$guard_status" -ne 0 ]]; then
+		return "$guard_status"
+	fi
+	_clean_worktree_index_is_readable "$worktree_path" "$worktree_branch" "$audit_context" || return 1
+	if [[ "$removal_mode" == "$_WT_CLEAN_MODE_RECOVERABLE" ]]; then
 		worktree_has_changes "$worktree_path" && return 1
 		_branch_has_active_interactive_claim "$worktree_path" "$worktree_branch" && return 1
 		_clean_has_exact_removal_lease "$worktree_path" || return 1
-	elif [[ "$guard_status" -ne 0 ]]; then
-		return "$guard_status"
 	fi
 
 	if worktree_has_changes "$worktree_path" && [[ "$force_merged" == "$_WT_CLEAN_BOOL_TRUE" ]]; then
