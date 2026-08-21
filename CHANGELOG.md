@@ -10,6 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.280] - 2026-08-21
+
+### Added
+
+- add manual Trends CSV imports (#30516)
+- Align product-copy humanisation with medium-aware prose defaults
+- add domain opportunity SQLite foundation (#30502)
+
+### Changed
+
+- Maintenance: mark t18296 complete (pr:#30502 completed:2026-08-21) (#30505)
+- Documentation: update hosting provider recommendations
+
+### Fixed
+
+- Fix pulse CI repair lifecycle races
+- eliminate Google Ads Qlty smell (#30515)
+- fail planning publication closed (#30506)
+
 ## [3.32.279] - 2026-08-21
 
 ### Changed
