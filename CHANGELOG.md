@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.281] - 2026-08-21
+
+### Added
+
+- improve reliability-adjusted routing observability
+- score exact-match domain candidates (#30522)
+
+### Changed
+
+- Maintenance: mark t18301 complete (pr:#30516 completed:2026-08-21) (#30518)
+
 ## [3.32.280] - 2026-08-21
 
 ### Added
