@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.283] - 2026-08-21
+
+### Added
+
+- add ranked local domain opportunity reports (#30535)
+- ingest Namecheap auctions
+
+### Changed
+
+- Refactor: reduce inventory parser complexity
+
+### Fixed
+
+- align OpenCode plugin with 1.18.21
+
 ## [3.32.282] - 2026-08-21
 
 ### Fixed
