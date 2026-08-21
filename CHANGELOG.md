@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.285] - 2026-08-22
+
+### Fixed
+
+- advertise public parent-status command (#30545)
+
 ## [3.32.284] - 2026-08-21
 
 ### Changed
