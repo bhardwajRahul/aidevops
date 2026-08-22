@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.286] - 2026-08-23
+
+### Changed
+
+- Documentation: stage release aggregation
+- Maintenance: mark t18302 complete (pr:#30535 completed:2026-08-21) (#30531)
+- Refactor: reduce observability routing smells (#30553)
+- Refactor: simplify tool outcome classification (#30554)
+- Refactor: reduce observability file complexity (#30551)
+
+### Fixed
+
+- Trust active release signer for source access
+- Bind GitHub App auth to worker Git transport
+
 ## [3.32.285] - 2026-08-22
 
 ### Fixed
