@@ -364,6 +364,19 @@ try {
     environment,
     "seal", "--experiment", prescriptiveExperiment, "--input", prescriptivePredictions,
   );
+  const noChangeExperiment = join(sandbox, "experiment-no-change");
+  const noChangePlan = invokeRequired(
+    environment,
+    "plan", "--corpus", corpus, "--candidates", candidates,
+    "--experiment", noChangeExperiment, "--experiment-id", "fixture-no-change",
+    "--suite", "quick", "--stage", "primary", "--mode", "autonomous",
+  );
+  const noChangePredictions = join(sandbox, "predictions-no-change.json");
+  writeJson(noChangePredictions, completedPredictions(noChangeExperiment));
+  invokeRequired(
+    environment,
+    "seal", "--experiment", noChangeExperiment, "--input", noChangePredictions,
+  );
 
   const runLock = join(experiment, "run.lock");
   writeFileSync(runLock, "fixture\n", { mode: 0o600 });
@@ -382,6 +395,47 @@ try {
     "run", "--experiment", experiment, "--corpus", corpus, "--catalog", catalog,
   );
   git(repository, "replace", "-d", baseSHA);
+
+  for (const invalidBackend of ["", "relative/backend"]) {
+    expectFailure(
+      { ...environment, AIDEVOPS_WORKER_EGRESS_BACKEND: invalidBackend },
+      /requires AIDEVOPS_WORKER_EGRESS_BACKEND to be an executable absolute file/u,
+      "run", "--experiment", experiment, "--corpus", corpus, "--catalog", catalog,
+    );
+  }
+  assert.equal(existsSync(runtimeMarker), false);
+
+  expectFailure(
+    { ...environment, AIDEVOPS_TEST_RUNTIME_FAILURE: "1" },
+    /infrastructure failed before a verified provider request.*evidence: artifacts\//u,
+    "run", "--experiment", experiment, "--corpus", corpus, "--catalog", catalog,
+  );
+  const infrastructureArtifact = readdirSync(join(experiment, "artifacts"))
+    .find((name) => name.includes(".infrastructure-") && name.endsWith(".json"));
+  assert.ok(infrastructureArtifact);
+  const infrastructureAttempt = JSON.parse(readFileSync(
+    join(experiment, "artifacts", infrastructureArtifact),
+    "utf8",
+  ));
+  assert.equal(infrastructureAttempt.runtime_status, 126);
+  assert.equal(infrastructureAttempt.provider_request_observed, false);
+  assert.equal(existsSync(join(experiment, infrastructureAttempt.log.path)), true);
+  assert.equal(existsSync(runtimeMarker), false);
+
+  const noChangeRun = invokeRequired(
+    { ...environment, AIDEVOPS_TEST_NO_CHANGE: "1" },
+    "run", "--experiment", noChangeExperiment, "--corpus", corpus, "--catalog", catalog,
+  );
+  assert.equal(noChangeRun.results[0].outcome, "fail");
+  assert.equal(noChangeRun.results[0].provider_request_observed, true);
+  assert.equal(noChangeRun.results[0].verification.functional_passed, false);
+  assert.equal(
+    readFileSync(
+      join(noChangeExperiment, "artifacts", `${noChangePlan.cells[0].cell_id}.patch`),
+      "utf8",
+    ),
+    "",
+  );
 
   const run = invokeRequired(
     environment,
