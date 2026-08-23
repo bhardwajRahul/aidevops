@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.287] - 2026-08-23
+
+### Added
+
+- add historical model replay benchmark (#30566)
+
+### Changed
+
+- Documentation: stage release aggregation
+
+### Fixed
+
+- preserve multiline secret injection
+
 ## [3.32.286] - 2026-08-23
 
 ### Changed
