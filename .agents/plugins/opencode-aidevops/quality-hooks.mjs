@@ -320,6 +320,7 @@ function handleToolBefore(ctx, log, input, output) {
     args: output.args || {},
     sessionId,
     scriptsDir: ctx.scriptsDir,
+    repositoryDir: ctx.repositoryDir,
     isReadTool,
     secretReadBlockReason,
     checkSecretReadGate,

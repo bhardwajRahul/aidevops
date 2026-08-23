@@ -148,8 +148,8 @@ _source_access_install_target_safe() { return 0; }
 _source_access_acquire_privilege() { return 2; }
 setup_rc=0
 setup_output=$(setup_source_access_broker 2>&1) || setup_rc=$?
-if [[ "$setup_rc" -ne 2 || "$setup_output" != *"run aidevops update from an interactive terminal"* ]]; then
-	printf 'FAIL: headless setup did not defer safely to the standard update command\n' >&2
+if [[ "$setup_rc" -ne 2 || "$setup_output" != *"run aidevops setup --scope source-access from an interactive terminal"* ]]; then
+	printf 'FAIL: headless setup did not defer safely to the explicit repair command\n' >&2
 	exit 1
 fi
 
@@ -173,8 +173,8 @@ if ! grep -qF 'SETUP_EXPLICIT_NON_INTERACTIVE' "$REPO_ROOT/setup.sh" ||
 	printf 'FAIL: non-interactive setup can expose a hidden source-access prompt\n' >&2
 	exit 1
 fi
-if ! grep -qF 'AIDEVOPS_NON_INTERACTIVE' "$REPO_ROOT/aidevops.sh"; then
-	printf 'FAIL: aidevops update does not honor explicit non-interactive mode\n' >&2
+if grep -qF '_source_access_privilege_cached' "$SOURCE_ACCESS_MODULE"; then
+	printf 'FAIL: source-access setup still consumes inherited cached sudo\n' >&2
 	exit 1
 fi
 
@@ -247,7 +247,6 @@ _source_access_release_commit() {
 _source_access_setup_source_current() { return 0; }
 _source_access_install_target_safe() { return 0; }
 _source_access_broker_current() { return 0; }
-_source_access_privilege_cached() { return 0; }
 _source_access_acquire_privilege() {
 	acquire_calls=$((acquire_calls + 1))
 	return 0
@@ -267,15 +266,14 @@ _source_access_privileged() {
 }
 INSTALL_DIR="$fixture_repo"
 if ! setup_source_access_broker; then
-	printf 'FAIL: cached-sudo fast path rejected valid privileged trust\n' >&2
+	printf 'FAIL: current broker was not accepted without privilege\n' >&2
 	exit 1
 fi
-if [[ "$trust_check_calls" -ne 1 || "$acquire_calls" -ne 0 ]]; then
-	printf 'FAIL: cached-sudo fast path skipped privileged trust validation\n' >&2
+if [[ "$trust_check_calls" -ne 0 || "$acquire_calls" -ne 0 ]]; then
+	printf 'FAIL: current broker attempted privileged trust validation\n' >&2
 	exit 1
 fi
 
-_source_access_privilege_cached() { return 1; }
 _source_access_privileged() {
 	trust_check_calls=$((trust_check_calls + 1))
 	return 1
@@ -291,13 +289,17 @@ if [[ "$trust_check_calls" -ne 0 || "$acquire_calls" -ne 0 ]]; then
 	exit 1
 fi
 
-_source_access_privilege_cached() { return 0; }
+_source_access_broker_current() { return 1; }
+_source_access_acquire_privilege() {
+	acquire_calls=$((acquire_calls + 1))
+	return 2
+}
 trust_check_calls=0
 acquire_calls=0
 setup_rc=0
 setup_source_access_broker >/dev/null 2>&1 || setup_rc=$?
-if [[ "$setup_rc" -ne 2 || "$acquire_calls" -ne 1 || "$trust_check_calls" -ne 2 ]]; then
-	printf 'FAIL: cached-sudo trust mismatch was accepted by the setup fast path\n' >&2
+if [[ "$setup_rc" -ne 2 || "$acquire_calls" -ne 1 || "$trust_check_calls" -ne 0 ]]; then
+	printf 'FAIL: non-TTY setup consumed cached sudo for privileged mutation\n' >&2
 	exit 1
 fi
 

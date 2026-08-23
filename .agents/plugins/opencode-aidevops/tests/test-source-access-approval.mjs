@@ -210,7 +210,7 @@ test("a stale root broker fails closed without creating an approval request", ()
           return "";
         },
       }),
-    /Run aidevops update from an interactive terminal to reconcile it/,
+    /Run aidevops setup --scope source-access from an interactive terminal to reconcile it/,
   );
   assert.equal(verifierCalls, 0);
   assert.equal(helperCalls, 0);
@@ -394,6 +394,118 @@ test("the loaded verifier accepts only the exact signed receipt", () => {
     writeFileSync(source, "#!/usr/bin/env bash\nprintf synthetic\\n\n");
     execFileSync("git", ["-C", repo, "rm", "--cached", "--quiet", "secret-helper.sh"]);
     assert.equal(verifySourceAccessReceipt(verifierArgs), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("one signed manifest authorizes only three exact repository-bound paths", () => {
+  const tempParent = join(homedir(), ".aidevops", ".agent-workspace", "tmp");
+  mkdirSync(tempParent, { recursive: true });
+  const root = mkdtempSync(join(tempParent, "source-access-manifest-node-test-"));
+  const repo = join(root, "repo");
+  const otherRepo = join(root, "other-repo");
+  const key = join(root, "source-access-key");
+  const stateDir = join(root, "state");
+  const uid = typeof process.getuid === "function" ? process.getuid() : 0;
+  const sessionId = "ses_manifest_123456";
+  const now = 1_800_000_000;
+
+  try {
+    mkdirSync(repo);
+    mkdirSync(otherRepo);
+    execFileSync("git", ["-C", repo, "init", "--quiet"]);
+    execFileSync("git", ["-C", otherRepo, "init", "--quiet"]);
+    const relativePaths = ["secret-helper.sh", "secret-other.sh", "secret-third.sh"];
+    const paths = relativePaths.map((name, index) => {
+      const filePath = join(repo, name);
+      writeFileSync(filePath, `source-${index}\n`);
+      return filePath;
+    });
+    execFileSync("git", ["-C", repo, "add", ...relativePaths]);
+    const extraPath = join(repo, "secret-extra.sh");
+    writeFileSync(extraPath, "extra\n");
+    execFileSync("git", ["-C", repo, "add", "secret-extra.sh"]);
+    const foreignPath = join(otherRepo, "secret-helper.sh");
+    writeFileSync(foreignPath, "foreign\n");
+    execFileSync("git", ["-C", otherRepo, "add", "secret-helper.sh"]);
+    execFileSync("/usr/bin/ssh-keygen", [
+      "-q", "-t", "ed25519", "-N", "", "-C", "source-access@aidevops.sh", "-f", key,
+    ]);
+
+    const approvalId = createHash("sha256")
+      .update([sessionId, String(uid), repo, SOURCE_ACCESS_REASON, ...paths].join("\0"), "utf8")
+      .digest("hex");
+    const snapshotDir = join(stateDir, "snapshots", String(uid));
+    const receiptDir = join(stateDir, "approvals", String(uid));
+    mkdirSync(snapshotDir, { recursive: true, mode: 0o755 });
+    mkdirSync(receiptDir, { recursive: true, mode: 0o755 });
+    const entries = paths.map((filePath, index) => {
+      const entryId = createHash("sha256").update(filePath, "utf8").digest("hex").slice(0, 32);
+      const snapshotPath = join(snapshotDir, `${approvalId}-${entryId}.source`);
+      const content = readFileSync(filePath);
+      writeFileSync(snapshotPath, content, { mode: 0o444 });
+      return {
+        path: filePath,
+        relative_path: relativePaths[index],
+        content_sha256: createHash("sha256").update(content).digest("hex"),
+        snapshot_path: snapshotPath,
+      };
+    });
+    const payload = {
+      schema: "aidevops-source-access-approval/v2",
+      approval_id: approvalId,
+      request_id: approvalId,
+      session_id: sessionId,
+      uid,
+      repo_root: repo,
+      repository_id: createHash("sha256").update(repo, "utf8").digest("hex"),
+      reason: SOURCE_ACCESS_REASON,
+      entries,
+      issued_at: now,
+      expires_at: now + 3600,
+    };
+    const payloadPath = join(root, "manifest-payload.json");
+    writeFileSync(payloadPath, canonicalReceiptPayload(payload));
+    execFileSync("/usr/bin/ssh-keygen", [
+      "-Y", "sign", "-f", key, "-n", "aidevops-source-access-v1", payloadPath,
+    ]);
+    const signature = readFileSync(`${payloadPath}.sig`, "utf8");
+    const receiptPath = join(receiptDir, `${approvalId}.json`);
+    writeFileSync(
+      receiptPath,
+      JSON.stringify({ schema: "aidevops-source-access-receipt/v2", payload, signature }),
+      { mode: 0o644 },
+    );
+    const baseArgs = {
+      sessionId,
+      reason: SOURCE_ACCESS_REASON,
+      repositoryDir: repo,
+      now: now + 1,
+      uid,
+      trustUid: uid,
+      stateDir,
+      publicKeyPath: `${key}.pub`,
+    };
+    for (const filePath of paths) {
+      const approval = verifySourceAccessReceipt({ ...baseArgs, filePath });
+      assert.ok(approval);
+      assert.equal(readFileSync(approval.approvedPath, "utf8"), readFileSync(filePath, "utf8"));
+    }
+    assert.equal(verifySourceAccessReceipt({ ...baseArgs, filePath: extraPath }), false);
+    assert.equal(
+      verifySourceAccessReceipt({ ...baseArgs, filePath: foreignPath, repositoryDir: otherRepo }),
+      false,
+    );
+    assert.equal(
+      verifySourceAccessReceipt({ ...baseArgs, filePath: paths[0], now: now + 3600 }),
+      false,
+    );
+    writeFileSync(paths[1], "altered\n");
+    assert.equal(verifySourceAccessReceipt({ ...baseArgs, filePath: paths[0] }), false);
+    writeFileSync(paths[1], "source-1\n");
+    rmSync(receiptPath);
+    assert.equal(verifySourceAccessReceipt({ ...baseArgs, filePath: paths[0] }), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -13,13 +13,17 @@ import stat
 import subprocess
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from operator import itemgetter
 from pathlib import Path
 from typing import Any, Callable
 
 SCHEMA_REQUEST = "aidevops-source-access-request/v1"
+SCHEMA_MANIFEST_REQUEST = "aidevops-source-access-request/v2"
 SCHEMA_RECEIPT = "aidevops-source-access-receipt/v1"
+SCHEMA_MANIFEST_RECEIPT = "aidevops-source-access-receipt/v2"
 SCHEMA_PAYLOAD = "aidevops-source-access-approval/v1"
+SCHEMA_MANIFEST_PAYLOAD = "aidevops-source-access-approval/v2"
 SCHEMA_TRUST = "aidevops-source-access-trust/v1"
 SIGNATURE_NAMESPACE = "aidevops-source-access-v1"
 SIGNER_IDENTITY = "source-access@aidevops.sh"
@@ -28,6 +32,7 @@ OVERRIDABLE_REASON = "secret-bearing basename"
 MAX_TTL_SECONDS = 12 * 60 * 60
 REQUEST_REUSE_SECONDS = 60 * 60
 MAX_SOURCE_BYTES = 10 * 1024 * 1024
+MAX_MANIFEST_ENTRIES = 32
 ID_PATTERN = re.compile(r"^[a-f0-9]{32,64}$")
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{6,256}$")
 ALLOWED_SUFFIXES = frozenset(
@@ -41,6 +46,10 @@ DENIED_NAMES = frozenset(
 DENIED_SUFFIXES = frozenset(".jks .key .keystore .p12 .pem .pfx".split())
 GIT = "/usr/bin/git"
 SSH_KEYGEN = "/usr/bin/ssh-keygen"
+
+
+def _current_timestamp() -> int:
+    return int(time.time())
 
 
 class SourceAccessError(RuntimeError):
@@ -75,6 +84,16 @@ class RequestSpec:
     path: str
     reason: str
     now: int | None = None
+
+
+@dataclass(frozen=True)
+class ManifestRequestSpec:
+    session_id: str
+    uid: int
+    home: Path
+    paths: tuple[str, ...]
+    reason: str
+    now: int = field(default_factory=_current_timestamp)
 
 
 @dataclass(frozen=True)
@@ -232,8 +251,29 @@ def canonical_tracked_source(raw_path: str) -> str:
     return str(resolved)
 
 
+def tracked_source_identity(raw_path: str) -> tuple[str, str, str]:
+    path = canonical_tracked_source(raw_path)
+    resolved = Path(path)
+    root_result = _run([GIT, "-C", str(resolved.parent), "rev-parse", "--show-toplevel"])
+    _require_source(root_result.returncode == 0, "source path is not inside a Git worktree")
+    repo_root = str(Path(root_result.stdout.decode("utf-8").strip()).resolve())
+    relative_path = str(resolved.relative_to(Path(repo_root)))
+    return path, repo_root, relative_path
+
+
 def scope_id(session_id: str, uid: int, path: str, reason: str) -> str:
     scope = f"{session_id}\0{uid}\0{path}\0{reason}".encode("utf-8")
+    return hashlib.sha256(scope).hexdigest()
+
+
+def repository_id(repo_root: str) -> str:
+    return hashlib.sha256(repo_root.encode("utf-8")).hexdigest()
+
+
+def manifest_scope_id(
+    session_id: str, uid: int, repo_root: str, reason: str, paths: list[str]
+) -> str:
+    scope = "\0".join([session_id, str(uid), repo_root, reason, *paths]).encode("utf-8")
     return hashlib.sha256(scope).hexdigest()
 
 
@@ -331,6 +371,45 @@ def create_request(config: Config, spec: RequestSpec) -> str:
     }
     atomic_write(directory / f"{request_id}.json", canonical_json(request) + b"\n", 0o600)
     return request_id
+
+
+def create_manifest_request(config: Config, spec: ManifestRequestSpec) -> str:
+    issued_at = spec.now
+    session_id = _validate_session_id(spec.session_id)
+    reason = _validate_reason(spec.reason)
+    _require_source(
+        2 <= len(spec.paths) <= MAX_MANIFEST_ENTRIES,
+        f"source-access manifests require 2 to {MAX_MANIFEST_ENTRIES} paths",
+    )
+    identities = list(map(tracked_source_identity, spec.paths))
+    repo_roots = set(map(itemgetter(1), identities))
+    _require_source(len(repo_roots) == 1, "all manifest paths must belong to one Git worktree")
+    entries = sorted(map(_manifest_entry, identities), key=itemgetter("relative_path"))
+    paths = list(map(itemgetter("path"), entries))
+    _require_source(len(paths) == len(set(paths)), "source-access manifest paths must be unique")
+    repo_root = repo_roots.pop()
+    request_id = manifest_scope_id(session_id, spec.uid, repo_root, reason, paths)
+    request = {
+        "schema": SCHEMA_MANIFEST_REQUEST,
+        "request_id": request_id,
+        "session_id": session_id,
+        "uid": spec.uid,
+        "repo_root": repo_root,
+        "repository_id": repository_id(repo_root),
+        "reason": reason,
+        "entries": entries,
+        "created_at": issued_at,
+    }
+    directory = request_directory(config, spec.home)
+    _ensure_directory(directory, 0o700)
+    request_path = directory / f"{request_id}.json"
+    atomic_write(request_path, canonical_json(request) + b"\n", 0o600)
+    return request_id
+
+
+def _manifest_entry(identity: tuple[str, str, str]) -> dict[str, str]:
+    path, _repo_root, relative_path = identity
+    return {"path": path, "relative_path": relative_path}
 
 
 def parse_ttl(value: str) -> int:
@@ -445,7 +524,9 @@ def _load_request(
     except (OSError, json.JSONDecodeError) as exc:
         raise SourceAccessError("source-access request was not found or is malformed") from exc
     schema_error = "source-access request schema or identifier is invalid"
-    _require_source(request.get("schema") == SCHEMA_REQUEST, schema_error)
+    _require_source(
+        request.get("schema") in (SCHEMA_REQUEST, SCHEMA_MANIFEST_REQUEST), schema_error
+    )
     _require_source(request.get("request_id") == request_id, schema_error)
     return request
 
@@ -516,6 +597,22 @@ def setup_key_material(config: Config) -> None:
     validate_key_material(config)
 
 
+def _single_approval_path(payload: dict[str, Any]) -> str:
+    return str(payload["path"])
+
+
+def _manifest_approval_path(payload: dict[str, Any]) -> str:
+    entries = payload["entries"]
+    _require_source(isinstance(entries, list), "source-access manifest is malformed")
+    return f"{payload['repo_root']} ({len(entries)} exact paths)"
+
+
+_APPROVAL_PATH_READERS = {
+    SCHEMA_PAYLOAD: _single_approval_path,
+    SCHEMA_MANIFEST_PAYLOAD: _manifest_approval_path,
+}
+
+
 def list_approvals(config: Config, *, uid: int, now: int | None = None) -> list[dict[str, Any]]:
     checked_at = int(time.time() if now is None else now)
     results: list[dict[str, Any]] = []
@@ -526,11 +623,12 @@ def list_approvals(config: Config, *, uid: int, now: int | None = None) -> list[
         try:
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             payload = receipt["payload"]
+            path = _APPROVAL_PATH_READERS[payload["schema"]](payload)
             results.append(
                 {
                     "approval_id": payload["approval_id"],
                     "session_id": payload["session_id"],
-                    "path": payload["path"],
+                    "path": path,
                     "expires_at": payload["expires_at"],
                     "status": "active" if checked_at < int(payload["expires_at"]) else "expired",
                 }

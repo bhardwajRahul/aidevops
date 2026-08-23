@@ -13,6 +13,7 @@ import {
   mkdtempSync,
   openSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   statSync,
@@ -20,6 +21,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import { validatedManifestReceipt } from "./source-access-manifest-approval.mjs";
 import {
   ROOT_BROKER,
   applyApprovedRead,
@@ -148,7 +150,7 @@ function approvalScopeId(sessionId, uid, filePath, reason) {
     .digest("hex");
 }
 
-function isGitTrackedFile(filePath, git, run = execFileSync) {
+function trackedFileIdentity(filePath, git, run = execFileSync) {
   try {
     const gitRoot = realpathSync(
       String(
@@ -166,10 +168,14 @@ function isGitTrackedFile(filePath, git, run = execFileSync) {
       stdio: ["ignore", "ignore", "ignore"],
       timeout: 15000,
     });
-    return true;
+    return { repoRoot: gitRoot, relativePath };
   } catch {
     return false;
   }
+}
+
+function isGitTrackedFile(filePath, git, run = execFileSync) {
+  return Boolean(trackedFileIdentity(filePath, git, run));
 }
 
 function verificationTempRoot() {
@@ -217,7 +223,7 @@ function requireValidReceipt(condition) {
   if (!condition) throw new Error("source-access receipt is invalid");
 }
 
-function validatedReceipt(options) {
+function validatedSingleReceipt(options) {
   const {
     sessionId,
     filePath,
@@ -273,6 +279,27 @@ function validatedReceipt(options) {
   requireValidReceipt(typeof receipt.signature === "string");
   requireValidReceipt(receipt.signature.includes("SSH SIGNATURE"));
   return {payload, publicKeyPath, receipt, run, snapshotPath, sshKeygen};
+}
+
+function validatedReceipt(options) {
+  try {
+    return validatedSingleReceipt(options);
+  } catch {
+    return validatedManifestReceipt(options, {
+      fileSha256,
+      hasSymlinkComponent,
+      receiptNames: (approvalsDir) =>
+        readdirSync(approvalsDir)
+          .filter((name) => /^[a-f0-9]{64}\.json$/.test(name))
+          .sort(),
+      requireValidReceipt,
+      sourceAccessReason: SOURCE_ACCESS_REASON,
+      sourceDigestMatches,
+      trackedFileIdentity,
+      trustedDirectory,
+      trustedRegularFile,
+    });
+  }
 }
 
 function verifyReceiptSignature({payload, publicKeyPath, receipt, run, snapshotPath, sshKeygen}) {
@@ -335,6 +362,7 @@ export function checkSecretReadWithApproval({
   args,
   sessionId,
   scriptsDir,
+  repositoryDir,
   isReadTool,
   secretReadBlockReason,
   checkSecretReadGate,
@@ -363,7 +391,9 @@ export function checkSecretReadWithApproval({
   }
 
   const brokerCurrent = brokerMatchesCurrentRelease(brokerMatches, scriptsDir);
-  const approval = brokerCurrent ? verify({ sessionId, filePath, reason }) : false;
+  const approval = brokerCurrent
+    ? verify({ sessionId, filePath, reason, repositoryDir })
+    : false;
   if (applyApprovedRead(args, approval, filePath, log)) return;
 
   const requestId = requestApprovalId({ brokerCurrent, filePath, reason, requestRun, sessionId });

@@ -98,11 +98,16 @@ def _load_source_access_core() -> Any:
 
 _SOURCE_CORE = _load_source_access_core()
 ID_PATTERN = _SOURCE_CORE.ID_PATTERN
+MAX_MANIFEST_ENTRIES = _SOURCE_CORE.MAX_MANIFEST_ENTRIES
+MAX_SOURCE_BYTES = _SOURCE_CORE.MAX_SOURCE_BYTES
 MAX_TTL_SECONDS = _SOURCE_CORE.MAX_TTL_SECONDS
 OVERRIDABLE_REASON = _SOURCE_CORE.OVERRIDABLE_REASON
 REQUEST_REUSE_SECONDS = _SOURCE_CORE.REQUEST_REUSE_SECONDS
 SCHEMA_PAYLOAD = _SOURCE_CORE.SCHEMA_PAYLOAD
 SCHEMA_RECEIPT = _SOURCE_CORE.SCHEMA_RECEIPT
+SCHEMA_MANIFEST_PAYLOAD = _SOURCE_CORE.SCHEMA_MANIFEST_PAYLOAD
+SCHEMA_MANIFEST_RECEIPT = _SOURCE_CORE.SCHEMA_MANIFEST_RECEIPT
+SCHEMA_MANIFEST_REQUEST = _SOURCE_CORE.SCHEMA_MANIFEST_REQUEST
 SCHEMA_TRUST = _SOURCE_CORE.SCHEMA_TRUST
 SIGNATURE_NAMESPACE = _SOURCE_CORE.SIGNATURE_NAMESPACE
 SIGNER_IDENTITY = _SOURCE_CORE.SIGNER_IDENTITY
@@ -111,6 +116,7 @@ TRUST_KEY_SOURCE_DEDICATED = _SOURCE_CORE.TRUST_KEY_SOURCE_DEDICATED
 ApprovalBinding = _SOURCE_CORE.ApprovalBinding
 ApprovalSpec = _SOURCE_CORE.ApprovalSpec
 Config = _SOURCE_CORE.Config
+ManifestRequestSpec = _SOURCE_CORE.ManifestRequestSpec
 RequestSpec = _SOURCE_CORE.RequestSpec
 SourceAccessError = _SOURCE_CORE.SourceAccessError
 VerificationSpec = _SOURCE_CORE.VerificationSpec
@@ -124,13 +130,17 @@ atomic_write = _SOURCE_CORE.atomic_write
 canonical_json = _SOURCE_CORE.canonical_json
 canonical_tracked_source = _SOURCE_CORE.canonical_tracked_source
 create_request = _SOURCE_CORE.create_request
+create_manifest_request = _SOURCE_CORE.create_manifest_request
 list_approvals = _SOURCE_CORE.list_approvals
+manifest_scope_id = _SOURCE_CORE.manifest_scope_id
 parse_ttl = _SOURCE_CORE.parse_ttl
 real_user = _SOURCE_CORE.real_user
 request_directory = _SOURCE_CORE.request_directory
+repository_id = _SOURCE_CORE.repository_id
 scope_id = _SOURCE_CORE.scope_id
 secure_source_content = _SOURCE_CORE.secure_source_content
 setup_key_material = _SOURCE_CORE.setup_key_material
+tracked_source_identity = _SOURCE_CORE.tracked_source_identity
 validate_key_material = _SOURCE_CORE.validate_key_material
 
 __all__ = [
@@ -139,12 +149,14 @@ __all__ = [
     "SSH_KEYGEN",
     "ApprovalSpec",
     "Config",
+    "ManifestRequestSpec",
     "RequestSpec",
     "SourceAccessError",
     "VerificationSpec",
     "approve_request",
     "canonical_json",
     "create_request",
+    "create_manifest_request",
     "list_approvals",
     "main",
     "parse_ttl",
@@ -181,6 +193,8 @@ def _sign_payload(config: Config, payload: dict[str, Any]) -> str:
 def approve_request(config: Config, spec: ApprovalSpec) -> dict[str, Any]:
     issued_at = int(time.time() if spec.now is None else spec.now)
     request = _load_request(config, spec.home, spec.request_id, spec.expected_uid)
+    if request.get("schema") == SCHEMA_MANIFEST_REQUEST:
+        return _approve_manifest_request(config, spec, request, issued_at)
     if request.get("uid") != spec.expected_uid:
         raise SourceAccessError("request user does not match the invoking sudo user")
     session_id = _validate_session_id(str(request.get("session_id", "")))
@@ -222,6 +236,116 @@ def approve_request(config: Config, spec: ApprovalSpec) -> dict[str, Any]:
         "signature": _sign_payload(config, payload),
     }
     atomic_write(snapshot_path, content, 0o444, config.trust_uid, directory_mode=0o755)
+    receipt_path = config.state_dir / "approvals" / str(spec.expected_uid) / f"{approval_id}.json"
+    atomic_write(receipt_path, canonical_json(receipt) + b"\n", 0o644, config.trust_uid)
+    try:
+        (request_directory(config, spec.home) / f"{spec.request_id}.json").unlink()
+    except FileNotFoundError:
+        pass
+    return payload
+
+
+def _validated_manifest_request(
+    request: dict[str, Any], expected_uid: int
+) -> tuple[str, str, str, list[dict[str, str]]]:
+    if request.get("uid") != expected_uid:
+        raise SourceAccessError("request user does not match the invoking sudo user")
+    session_id = _validate_session_id(str(request.get("session_id", "")))
+    reason = _validate_reason(str(request.get("reason", "")))
+    raw_entries = request.get("entries")
+    if not isinstance(raw_entries, list) or not 2 <= len(raw_entries) <= MAX_MANIFEST_ENTRIES:
+        raise SourceAccessError("source-access manifest entry count is invalid")
+    identities = [tracked_source_identity(str(entry.get("path", ""))) for entry in raw_entries]
+    repo_roots = {identity[1] for identity in identities}
+    if len(repo_roots) != 1:
+        raise SourceAccessError("all manifest paths must belong to one Git worktree")
+    repo_root = repo_roots.pop()
+    entries = sorted(
+        ({"path": path, "relative_path": relative} for path, _repo, relative in identities),
+        key=lambda entry: entry["relative_path"],
+    )
+    paths = [entry["path"] for entry in entries]
+    if len(paths) != len(set(paths)):
+        raise SourceAccessError("source-access manifest paths must be unique")
+    expected_id = manifest_scope_id(session_id, expected_uid, repo_root, reason, paths)
+    if request.get("request_id") != expected_id:
+        raise SourceAccessError("source-access manifest binding is invalid")
+    if request.get("repo_root") != repo_root or request.get("repository_id") != repository_id(repo_root):
+        raise SourceAccessError("source-access manifest repository binding is invalid")
+    if request.get("entries") != entries:
+        raise SourceAccessError("source-access manifest entries are invalid")
+    return session_id, reason, repo_root, entries
+
+
+def _approve_manifest_request(
+    config: Config,
+    spec: ApprovalSpec,
+    request: dict[str, Any],
+    issued_at: int,
+) -> dict[str, Any]:
+    session_id, reason, repo_root, entries = _validated_manifest_request(
+        request, spec.expected_uid
+    )
+    created_at = request.get("created_at")
+    if isinstance(created_at, bool) or not isinstance(created_at, int):
+        raise SourceAccessError("source-access request timestamp is invalid")
+    request_age = issued_at - created_at
+    if request_age < 0 or request_age > REQUEST_REUSE_SECONDS:
+        raise SourceAccessError("source-access request has expired; create the manifest again")
+    if not config.private_key.exists() or not config.public_key.exists():
+        raise SourceAccessError("run the installed root-owned source-access broker setup first")
+
+    approval_id = str(request["request_id"])
+    approved_entries: list[dict[str, Any]] = []
+    contents: dict[str, bytes] = {}
+    total_bytes = 0
+    for entry in entries:
+        content, content_sha256 = secure_source_content(entry["path"])
+        total_bytes += len(content)
+        if total_bytes > MAX_SOURCE_BYTES:
+            raise SourceAccessError("source-access manifest exceeds the total size limit")
+        entry_id = hashlib.sha256(entry["path"].encode("utf-8")).hexdigest()[:32]
+        snapshot_path = (
+            config.state_dir
+            / "snapshots"
+            / str(spec.expected_uid)
+            / f"{approval_id}-{entry_id}.source"
+        )
+        approved_entry = {
+            **entry,
+            "content_sha256": content_sha256,
+            "snapshot_path": str(snapshot_path),
+        }
+        approved_entries.append(approved_entry)
+        contents[str(snapshot_path)] = content
+
+    confirmation_scope = {
+        **request,
+        "entries": approved_entries,
+        "ttl_seconds": spec.ttl_seconds,
+    }
+    if spec.confirm is not None and not spec.confirm(confirmation_scope):
+        raise SourceAccessError("source-access approval cancelled")
+    payload = {
+        "schema": SCHEMA_MANIFEST_PAYLOAD,
+        "approval_id": approval_id,
+        "request_id": spec.request_id,
+        "session_id": session_id,
+        "uid": spec.expected_uid,
+        "repo_root": repo_root,
+        "repository_id": repository_id(repo_root),
+        "reason": reason,
+        "entries": approved_entries,
+        "issued_at": issued_at,
+        "expires_at": issued_at + spec.ttl_seconds,
+    }
+    receipt = {
+        "schema": SCHEMA_MANIFEST_RECEIPT,
+        "payload": payload,
+        "signature": _sign_payload(config, payload),
+    }
+    for snapshot_path, content in contents.items():
+        atomic_write(Path(snapshot_path), content, 0o444, config.trust_uid, directory_mode=0o755)
     receipt_path = config.state_dir / "approvals" / str(spec.expected_uid) / f"{approval_id}.json"
     atomic_write(receipt_path, canonical_json(receipt) + b"\n", 0o644, config.trust_uid)
     try:
@@ -331,11 +455,105 @@ def verify_approval(config: Config, spec: VerificationSpec) -> bool:
             snapshot_path=config.state_dir / "snapshots" / str(spec.uid) / f"{approval_id}.source",
             uid=spec.uid,
         )
-        payload, signature = _validated_receipt(config, binding)
-        _require_valid_approval(_verify_signature(config, payload, signature))
-        return True
+        try:
+            payload, signature = _validated_receipt(config, binding)
+            _require_valid_approval(_verify_signature(config, payload, signature))
+            return True
+        except (OSError, ValueError, TypeError, json.JSONDecodeError, SourceAccessError):
+            return _verify_manifest_approval(
+                config, VerificationSpec(session_id, spec.uid, path, reason), checked_at
+            )
     except (OSError, ValueError, TypeError, json.JSONDecodeError, SourceAccessError):
         return False
+
+
+def _verify_manifest_approval(
+    config: Config,
+    spec: VerificationSpec,
+    checked_at: int,
+) -> bool:
+    approvals_dir = config.state_dir / "approvals" / str(spec.uid)
+    if not _trusted_directory(approvals_dir, config.trust_uid):
+        return False
+    for receipt_path in sorted(approvals_dir.glob("*.json")):
+        try:
+            if not _trusted_file(receipt_path, config.trust_uid):
+                continue
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            _require_valid_approval(isinstance(receipt, dict))
+            payload = receipt.get("payload")
+            _require_valid_approval(receipt.get("schema") == SCHEMA_MANIFEST_RECEIPT)
+            _require_valid_approval(isinstance(payload, dict))
+            _require_valid_approval(payload.get("schema") == SCHEMA_MANIFEST_PAYLOAD)
+            _require_valid_approval(payload.get("session_id") == spec.session_id)
+            _require_valid_approval(payload.get("uid") == spec.uid)
+            _require_valid_approval(payload.get("reason") == spec.reason)
+            raw_entries = payload.get("entries")
+            _require_valid_approval(
+                isinstance(raw_entries, list)
+                and 2 <= len(raw_entries) <= MAX_MANIFEST_ENTRIES
+            )
+            identities = [
+                tracked_source_identity(str(entry.get("path", ""))) for entry in raw_entries
+            ]
+            repo_roots = {identity[1] for identity in identities}
+            _require_valid_approval(len(repo_roots) == 1)
+            repo_root = repo_roots.pop()
+            _require_valid_approval(payload.get("repo_root") == repo_root)
+            _require_valid_approval(payload.get("repository_id") == repository_id(repo_root))
+            expected_entries = sorted(
+                (
+                    {"path": source_path, "relative_path": relative_path}
+                    for source_path, _repo, relative_path in identities
+                ),
+                key=lambda entry: entry["relative_path"],
+            )
+            paths = [entry["path"] for entry in expected_entries]
+            _require_valid_approval(len(paths) == len(set(paths)))
+            approval_id = manifest_scope_id(
+                spec.session_id, spec.uid, repo_root, spec.reason, paths
+            )
+            _require_valid_approval(payload.get("approval_id") == approval_id)
+            _require_valid_approval(payload.get("request_id") == approval_id)
+            _require_valid_approval(receipt_path.name == f"{approval_id}.json")
+            _require_valid_approval(spec.path in paths)
+            _require_valid_approval(len(raw_entries) == len(expected_entries))
+            total_bytes = 0
+            for raw_entry, expected_entry in zip(raw_entries, expected_entries):
+                _require_valid_approval(
+                    raw_entry.get("path") == expected_entry["path"]
+                    and raw_entry.get("relative_path") == expected_entry["relative_path"]
+                )
+                content, content_sha256 = secure_source_content(expected_entry["path"])
+                total_bytes += len(content)
+                _require_valid_approval(total_bytes <= MAX_SOURCE_BYTES)
+                _require_valid_approval(raw_entry.get("content_sha256") == content_sha256)
+                entry_id = hashlib.sha256(expected_entry["path"].encode("utf-8")).hexdigest()[:32]
+                snapshot_path = (
+                    config.state_dir
+                    / "snapshots"
+                    / str(spec.uid)
+                    / f"{approval_id}-{entry_id}.source"
+                )
+                _require_valid_approval(raw_entry.get("snapshot_path") == str(snapshot_path))
+                _require_valid_approval(_trusted_file(snapshot_path, config.trust_uid))
+                _require_valid_approval(
+                    hashlib.sha256(snapshot_path.read_bytes()).hexdigest() == content_sha256
+                )
+            issued_at = payload.get("issued_at")
+            expires_at = payload.get("expires_at")
+            _require_valid_approval(isinstance(issued_at, int) and not isinstance(issued_at, bool))
+            _require_valid_approval(isinstance(expires_at, int) and not isinstance(expires_at, bool))
+            _require_valid_approval(checked_at >= issued_at)
+            _require_valid_approval(checked_at < expires_at)
+            _require_valid_approval(expires_at - issued_at <= MAX_TTL_SECONDS)
+            signature = receipt.get("signature")
+            _require_valid_approval(isinstance(signature, str))
+            _require_valid_approval(_verify_signature(config, payload, signature))
+            return True
+        except (OSError, ValueError, TypeError, json.JSONDecodeError, SourceAccessError):
+            continue
+    return False
 
 
 def revoke_approval(config: Config, *, approval_id: str, uid: int) -> None:
@@ -343,14 +561,27 @@ def revoke_approval(config: Config, *, approval_id: str, uid: int) -> None:
         raise SourceAccessError("invalid approval identifier")
     receipt_path = config.state_dir / "approvals" / str(uid) / f"{approval_id}.json"
     try:
-        receipt_path.unlink()
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
         raise SourceAccessError("source-access approval was not found") from exc
-    snapshot_path = config.state_dir / "snapshots" / str(uid) / f"{approval_id}.source"
-    try:
-        snapshot_path.unlink()
-    except FileNotFoundError:
-        pass
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SourceAccessError("source-access approval is malformed") from exc
+    receipt_path.unlink()
+    payload = receipt.get("payload", {})
+    snapshot_paths = [config.state_dir / "snapshots" / str(uid) / f"{approval_id}.source"]
+    if receipt.get("schema") == SCHEMA_MANIFEST_RECEIPT and isinstance(payload, dict):
+        snapshot_paths = [
+            Path(str(entry.get("snapshot_path", "")))
+            for entry in payload.get("entries", [])
+            if isinstance(entry, dict)
+        ]
+    expected_snapshot_dir = config.state_dir / "snapshots" / str(uid)
+    for snapshot_path in snapshot_paths:
+        try:
+            if snapshot_path.parent == expected_snapshot_dir:
+                snapshot_path.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def _trusted_root_broker(config: Config) -> bool:
@@ -396,10 +627,16 @@ def _confirm_setup() -> bool:
 def _confirm_request(request: dict[str, Any]) -> bool:
     print("Approve temporary source-code read access:")
     print(f"  Session: {request['session_id']}")
-    print(f"  Path:    {request['path']}")
+    if request.get("schema") == SCHEMA_MANIFEST_REQUEST:
+        print(f"  Repo:    {request['repo_root']}")
+        print("  Paths:")
+        for entry in request["entries"]:
+            print(f"    - {entry['relative_path']} [{entry['content_sha256']}]")
+    else:
+        print(f"  Path:    {request['path']}")
     print(f"  Reason:  {request['reason']}")
     print(f"  TTL:     {request['ttl_seconds'] // 60} minutes")
-    return input("Type APPROVE SOURCE ACCESS to confirm: ") == "APPROVE SOURCE ACCESS"
+    return input("Type APPROVE to confirm: ") == "APPROVE"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -408,7 +645,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("setup")
     request = subparsers.add_parser("request")
     request.add_argument("--session", required=True)
-    request.add_argument("--path", required=True)
+    request.add_argument("--path", required=True, action="append")
     request.add_argument("--reason", required=True)
     approve = subparsers.add_parser("approve")
     approve.add_argument("request_id")
@@ -435,10 +672,16 @@ def _run_setup(_args: argparse.Namespace, config: Config, _uid: int, _home: Path
 
 
 def _run_request(args: argparse.Namespace, config: Config, uid: int, home: Path) -> int:
-    request_id = create_request(
-        config,
-        RequestSpec(args.session, uid, home, args.path, args.reason),
-    )
+    if len(args.path) == 1:
+        request_id = create_request(
+            config,
+            RequestSpec(args.session, uid, home, args.path[0], args.reason),
+        )
+    else:
+        request_id = create_manifest_request(
+            config,
+            ManifestRequestSpec(args.session, uid, home, tuple(args.path), args.reason),
+        )
     print(request_id)
     return 0
 
