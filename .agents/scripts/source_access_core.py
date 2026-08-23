@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import time
 from dataclasses import dataclass
+from operator import itemgetter
 from pathlib import Path
 from typing import Any, Callable
 
@@ -376,14 +377,11 @@ def create_manifest_request(config: Config, spec: ManifestRequestSpec) -> str:
         2 <= len(spec.paths) <= MAX_MANIFEST_ENTRIES,
         f"source-access manifests require 2 to {MAX_MANIFEST_ENTRIES} paths",
     )
-    identities = [tracked_source_identity(path) for path in spec.paths]
-    repo_roots = {identity[1] for identity in identities}
+    identities = list(map(tracked_source_identity, spec.paths))
+    repo_roots = set(map(itemgetter(1), identities))
     _require_source(len(repo_roots) == 1, "all manifest paths must belong to one Git worktree")
-    entries = sorted(
-        ({"path": path, "relative_path": relative} for path, _repo, relative in identities),
-        key=lambda entry: entry["relative_path"],
-    )
-    paths = [entry["path"] for entry in entries]
+    entries = sorted(map(_manifest_entry, identities), key=itemgetter("relative_path"))
+    paths = list(map(itemgetter("path"), entries))
     _require_source(len(paths) == len(set(paths)), "source-access manifest paths must be unique")
     repo_root = repo_roots.pop()
     request_id = manifest_scope_id(session_id, spec.uid, repo_root, reason, paths)
@@ -403,6 +401,11 @@ def create_manifest_request(config: Config, spec: ManifestRequestSpec) -> str:
     request_path = directory / f"{request_id}.json"
     atomic_write(request_path, canonical_json(request) + b"\n", 0o600)
     return request_id
+
+
+def _manifest_entry(identity: tuple[str, str, str]) -> dict[str, str]:
+    path, _repo_root, relative_path = identity
+    return {"path": path, "relative_path": relative_path}
 
 
 def parse_ttl(value: str) -> int:
