@@ -401,20 +401,6 @@ def create_manifest_request(config: Config, spec: ManifestRequestSpec) -> str:
     directory = request_directory(config, spec.home)
     _ensure_directory(directory, 0o700)
     request_path = directory / f"{request_id}.json"
-    if request_path.is_file():
-        try:
-            existing = json.loads(request_path.read_text(encoding="utf-8"))
-            created_at = existing.get("created_at")
-            if (
-                isinstance(created_at, int)
-                and not isinstance(created_at, bool)
-                and 0 <= issued_at - created_at <= REQUEST_REUSE_SECONDS
-                and existing.get("schema") == SCHEMA_MANIFEST_REQUEST
-                and existing.get("request_id") == request_id
-            ):
-                return request_id
-        except (OSError, json.JSONDecodeError):
-            pass
     atomic_write(request_path, canonical_json(request) + b"\n", 0o600)
     return request_id
 

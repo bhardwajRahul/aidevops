@@ -461,12 +461,7 @@ def verify_approval(config: Config, spec: VerificationSpec) -> bool:
             return True
         except (OSError, ValueError, TypeError, json.JSONDecodeError, SourceAccessError):
             return _verify_manifest_approval(
-                config,
-                session_id=session_id,
-                uid=spec.uid,
-                path=path,
-                reason=reason,
-                checked_at=checked_at,
+                config, VerificationSpec(session_id, spec.uid, path, reason), checked_at
             )
     except (OSError, ValueError, TypeError, json.JSONDecodeError, SourceAccessError):
         return False
@@ -474,14 +469,10 @@ def verify_approval(config: Config, spec: VerificationSpec) -> bool:
 
 def _verify_manifest_approval(
     config: Config,
-    *,
-    session_id: str,
-    uid: int,
-    path: str,
-    reason: str,
+    spec: VerificationSpec,
     checked_at: int,
 ) -> bool:
-    approvals_dir = config.state_dir / "approvals" / str(uid)
+    approvals_dir = config.state_dir / "approvals" / str(spec.uid)
     if not _trusted_directory(approvals_dir, config.trust_uid):
         return False
     for receipt_path in sorted(approvals_dir.glob("*.json")):
@@ -494,9 +485,9 @@ def _verify_manifest_approval(
             _require_valid_approval(receipt.get("schema") == SCHEMA_MANIFEST_RECEIPT)
             _require_valid_approval(isinstance(payload, dict))
             _require_valid_approval(payload.get("schema") == SCHEMA_MANIFEST_PAYLOAD)
-            _require_valid_approval(payload.get("session_id") == session_id)
-            _require_valid_approval(payload.get("uid") == uid)
-            _require_valid_approval(payload.get("reason") == reason)
+            _require_valid_approval(payload.get("session_id") == spec.session_id)
+            _require_valid_approval(payload.get("uid") == spec.uid)
+            _require_valid_approval(payload.get("reason") == spec.reason)
             raw_entries = payload.get("entries")
             _require_valid_approval(
                 isinstance(raw_entries, list)
@@ -519,11 +510,13 @@ def _verify_manifest_approval(
             )
             paths = [entry["path"] for entry in expected_entries]
             _require_valid_approval(len(paths) == len(set(paths)))
-            approval_id = manifest_scope_id(session_id, uid, repo_root, reason, paths)
+            approval_id = manifest_scope_id(
+                spec.session_id, spec.uid, repo_root, spec.reason, paths
+            )
             _require_valid_approval(payload.get("approval_id") == approval_id)
             _require_valid_approval(payload.get("request_id") == approval_id)
             _require_valid_approval(receipt_path.name == f"{approval_id}.json")
-            _require_valid_approval(path in paths)
+            _require_valid_approval(spec.path in paths)
             _require_valid_approval(len(raw_entries) == len(expected_entries))
             total_bytes = 0
             for raw_entry, expected_entry in zip(raw_entries, expected_entries):
@@ -539,7 +532,7 @@ def _verify_manifest_approval(
                 snapshot_path = (
                     config.state_dir
                     / "snapshots"
-                    / str(uid)
+                    / str(spec.uid)
                     / f"{approval_id}-{entry_id}.source"
                 )
                 _require_valid_approval(raw_entry.get("snapshot_path") == str(snapshot_path))
