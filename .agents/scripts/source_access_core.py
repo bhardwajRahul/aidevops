@@ -13,7 +13,7 @@ import stat
 import subprocess
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from operator import itemgetter
 from pathlib import Path
 from typing import Any, Callable
@@ -46,6 +46,10 @@ DENIED_NAMES = frozenset(
 DENIED_SUFFIXES = frozenset(".jks .key .keystore .p12 .pem .pfx".split())
 GIT = "/usr/bin/git"
 SSH_KEYGEN = "/usr/bin/ssh-keygen"
+
+
+def _current_timestamp() -> int:
+    return int(time.time())
 
 
 class SourceAccessError(RuntimeError):
@@ -89,7 +93,7 @@ class ManifestRequestSpec:
     home: Path
     paths: tuple[str, ...]
     reason: str
-    now: int | None = None
+    now: int = field(default_factory=_current_timestamp)
 
 
 @dataclass(frozen=True)
@@ -370,7 +374,7 @@ def create_request(config: Config, spec: RequestSpec) -> str:
 
 
 def create_manifest_request(config: Config, spec: ManifestRequestSpec) -> str:
-    issued_at = int(time.time() if spec.now is None else spec.now)
+    issued_at = spec.now
     session_id = _validate_session_id(spec.session_id)
     reason = _validate_reason(spec.reason)
     _require_source(
@@ -593,6 +597,22 @@ def setup_key_material(config: Config) -> None:
     validate_key_material(config)
 
 
+def _single_approval_path(payload: dict[str, Any]) -> str:
+    return str(payload["path"])
+
+
+def _manifest_approval_path(payload: dict[str, Any]) -> str:
+    entries = payload["entries"]
+    _require_source(isinstance(entries, list), "source-access manifest is malformed")
+    return f"{payload['repo_root']} ({len(entries)} exact paths)"
+
+
+_APPROVAL_PATH_READERS = {
+    SCHEMA_PAYLOAD: _single_approval_path,
+    SCHEMA_MANIFEST_PAYLOAD: _manifest_approval_path,
+}
+
+
 def list_approvals(config: Config, *, uid: int, now: int | None = None) -> list[dict[str, Any]]:
     checked_at = int(time.time() if now is None else now)
     results: list[dict[str, Any]] = []
@@ -603,11 +623,7 @@ def list_approvals(config: Config, *, uid: int, now: int | None = None) -> list[
         try:
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             payload = receipt["payload"]
-            path = payload.get("path")
-            if path is None:
-                entries = payload["entries"]
-                _require_source(isinstance(entries, list), "source-access manifest is malformed")
-                path = f"{payload['repo_root']} ({len(entries)} exact paths)"
+            path = _APPROVAL_PATH_READERS[payload["schema"]](payload)
             results.append(
                 {
                     "approval_id": payload["approval_id"],
