@@ -60,13 +60,16 @@ export function checkGateWithApprovalInstructions({
     if (!brokerCurrent) {
       throw new Error(
         `${originalMessage}\n\nThe root-owned source-access broker does not match this release. ` +
-          "Run aidevops update from an interactive terminal to reconcile it.",
+          "Run aidevops setup --scope source-access from an interactive terminal to reconcile it.",
       );
     }
     if (!requestId) throw error;
     throw new Error(
       `${originalMessage}\n\nTo approve only this tracked source path for this session, run:\n` +
-        `sudo -k /usr/bin/python3 -I -B ${ROOT_BROKER} approve ${requestId} --ttl 12h`,
+        `sudo -k /usr/bin/python3 -I -B ${ROOT_BROKER} approve ${requestId} --ttl 12h\n\n` +
+        "For one approval covering several exact tracked paths, create one request with " +
+        "`aidevops source-access request --session <session> --reason 'secret-bearing basename' " +
+        "--path <path-1> --path <path-2> ...`, then approve the returned request ID.",
     );
   }
 }

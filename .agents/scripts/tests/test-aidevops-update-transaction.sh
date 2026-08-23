@@ -60,6 +60,16 @@ source "$TEST_ROOT/_update_canonical_has_untracked_only.sh"
 # shellcheck source=/dev/null
 source "$TEST_ROOT/_update_fetch_main.sh"
 
+source_access_reconciliation_body=$(declare -f _run_update_source_access_reconciliation)
+if [[ "$source_access_reconciliation_body" == *"AIDEVOPS_DEFERRED_ACTION action=source-access-reconcile"* ]] &&
+	[[ "$source_access_reconciliation_body" != *"sudo"* ]] &&
+	[[ "$source_access_reconciliation_body" != *"--stage source-access"* ]]; then
+	pass "routine update reports source-access repair without privileged reconciliation"
+else
+	fail "routine update reports source-access repair without privileged reconciliation" \
+		"source-access reconciliation can still invoke privileged setup"
+fi
+
 print_error() {
 	local message="$1"
 	printf 'ERROR %s\n' "$message"
@@ -325,7 +335,14 @@ _update_repo_verify_files_changed() { return 1; }
 _update_check_workflow_drift() { return 0; }
 _update_verify_signature() { return 0; }
 _update_fresh_install() { return 0; }
-_update_sync_projects() { return 0; }
+UPDATE_ENVIRONMENT_RECEIPTS=""
+_update_sync_projects() {
+	local skip="$1"
+	local version="$2"
+	: "$skip" "$version"
+	UPDATE_ENVIRONMENT_RECEIPTS+="${EDITOR}|${VISUAL}|${GIT_EDITOR}|${GIT_SEQUENCE_EDITOR}|${GIT_PAGER}|${PAGER}|${GIT_TERMINAL_PROMPT}"$'\n'
+	return 0
+}
 _update_reconcile_repo_verify() { return 0; }
 _update_check_homebrew() { return 0; }
 _update_check_planning() { return 0; }
@@ -465,6 +482,17 @@ _run_update_setup() {
 AGENTS_DIR="$HOME/.aidevops/agents"
 AIDEVOPS_SKIP_PULSE_RESTART=1
 _AIDEVOPS_UPDATE_TRUE=true
+EDITOR_SENTINEL="$TEST_ROOT/editor-sentinel"
+cat >"$EDITOR_SENTINEL" <<'EOF'
+#!/usr/bin/env bash
+printf 'invoked\n' >>"$EDITOR_SENTINEL_RECEIPT"
+exit 91
+EOF
+chmod +x "$EDITOR_SENTINEL"
+EDITOR_SENTINEL_RECEIPT="$TEST_ROOT/editor-sentinel-invoked"
+export EDITOR_SENTINEL_RECEIPT
+export EDITOR="$EDITOR_SENTINEL" VISUAL="$EDITOR_SENTINEL"
+export GIT_EDITOR="$EDITOR_SENTINEL" GIT_SEQUENCE_EDITOR="$EDITOR_SENTINEL"
 
 INTEGRATION_LINKED="$TEST_ROOT/integration-linked"
 /usr/bin/git -C "$INTEGRATION_REPO" worktree add -q -b linked-update-test "$INTEGRATION_LINKED"
@@ -486,6 +514,15 @@ if integration_output=$(cmd_update --skip-project-sync --compact) &&
 	pass "shim-safe audited canonical fast-forward reaches setup and verifies activation"
 else
 	fail "shim-safe audited canonical fast-forward reaches setup and verifies activation" "$integration_output"
+fi
+if AIDEVOPS_NON_INTERACTIVE=true cmd_update --skip-project-sync --compact >/dev/null &&
+	[[ ! -e "$EDITOR_SENTINEL_RECEIPT" ]] &&
+	[[ "$UPDATE_ENVIRONMENT_RECEIPTS" != *"$EDITOR_SENTINEL"* ]] &&
+	[[ "$UPDATE_ENVIRONMENT_RECEIPTS" == *"/usr/bin/false|/usr/bin/false|/usr/bin/false|/usr/bin/false|cat|cat|0"* ]]; then
+	pass "interactive and non-interactive updates suppress editor and pager inheritance"
+else
+	fail "interactive and non-interactive updates suppress editor and pager inheritance" \
+		"receipt=${UPDATE_ENVIRONMENT_RECEIPTS//$'\n'/;} sentinel=$([[ -e "$EDITOR_SENTINEL_RECEIPT" ]] && printf invoked || printf clean)"
 fi
 
 printf 'untracked update fixture\n' >"$INTEGRATION_REPO/untracked-update.txt"

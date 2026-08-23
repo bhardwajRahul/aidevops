@@ -79,6 +79,22 @@ expected result is mechanically decidable, implement or strengthen deterministic
 enforcement and retain the concise invariant until delivery is verified. Use
 `.agents/tools/build-agent/agent-review.md` before changing instruction semantics.
 
+### Operational update and privilege boundary
+
+`aidevops update` is a user-space operational transaction: it must never launch
+an editor, pager, composition flow, or privileged repair implicitly. A stale
+root-owned component is reported as a machine-readable deferred action and is
+reconciled only by an explicit human-owned scoped setup command in an attached
+terminal. Non-TTY execution must not consume inherited or cached sudo authority.
+
+Source-read exceptions follow the same low-friction/least-privilege invariant.
+One human decision may sign an exact, bounded manifest of tracked files from one
+Git worktree for one user, runtime session, reason, content set, and TTL. It must
+not authorize directories, additional paths, another worktree, changed bytes, or
+shell execution. Regression coverage lives in
+`test-aidevops-update-transaction.sh`, `test-setup-source-access-broker.sh`,
+`test-source-access-helper.py`, and `test-source-access-approval.mjs`.
+
 Examples: version bumping, file discovery, credential lookup, schema validation,
 and safety guards belong in tools; dispatch priority, diagnosis, decomposition,
 and trade-offs remain model judgment. See `reference/progressive-disclosure.md`

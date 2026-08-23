@@ -26,7 +26,7 @@ tools:
 - **Agents**: `~/.aidevops/agents/` | **Backups**: `~/.aidevops/config-backups/` | **Credentials**: `~/.config/aidevops/credentials.sh`
 - **Git signing**: keep a passphrase-protected interactive key and a separate signing-only headless key; see `reference/git-signing.md`
 
-**What setup.sh does**: checks required deps (`jq`, `curl`, `ssh`, `sqlite3`) and optional deps (`sshpass`, `gh`, `glab`, `tea`); copies `.agents/` → `~/.aidevops/agents/` with timestamped config backups; injects AGENTS.md pointer into `~/.opencode/AGENTS.md`, `~/.cursor/AGENTS.md`, `~/.claude/AGENTS.md`, `~/.config/cursor/AGENTS.md`; updates OpenCode agent paths in `~/.config/opencode/opencode.json`; and provisions the root-owned source-access broker from the exact signed release when an interactive terminal can authorize sudo.
+**What setup.sh does**: checks required deps (`jq`, `curl`, `ssh`, `sqlite3`) and optional deps (`sshpass`, `gh`, `glab`, `tea`); copies `.agents/` → `~/.aidevops/agents/` with timestamped config backups; injects AGENTS.md pointer into `~/.opencode/AGENTS.md`, `~/.cursor/AGENTS.md`, `~/.claude/AGENTS.md`, `~/.config/cursor/AGENTS.md`; updates OpenCode agent paths in `~/.config/opencode/opencode.json`; and provisions the root-owned source-access broker from the exact signed release only through explicit interactive setup.
 
 **Deployed structure**: `~/.aidevops/agents/` (AGENTS.md, aidevops/, tools/, services/, workflows/, scripts/) + `~/.aidevops/config-backups/[YYYYMMDD_HHMMSS]/`
 
@@ -59,9 +59,12 @@ with the current checkout, runs the changed deploy stages, verifies `VERSION` an
 is unsafe or fails. The Pulse scope refreshes both the main supervisor and the
 dedicated merge scheduler. Unknown stages fail non-zero and print the valid list.
 
-Normal interactive setup/update reconciles source-access automatically. The scoped
-command is a repair/testing surface, not a required post-install step. Non-TTY
-automation never prompts for sudo and leaves an unavailable broker fail-closed.
+Normal `aidevops update` remains user-space-only and reports
+`AIDEVOPS_DEFERRED_ACTION action=source-access-reconcile` only when the broker
+bytes or trust files need repair. A human then runs
+`aidevops setup --scope source-access` in an attached terminal. The scoped command
+invalidates inherited sudo before and after repair; non-TTY automation never
+consumes cached sudo and leaves an unavailable broker fail-closed.
 
 ## Manual Configuration
 

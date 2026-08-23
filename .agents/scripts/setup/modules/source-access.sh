@@ -256,24 +256,21 @@ _source_access_install_target_safe() {
 
 _source_access_acquire_privilege() {
 	[[ -x /usr/bin/sudo ]] || return 1
-	if _source_access_privilege_cached; then
-		return 0
-	fi
 	[[ "${AIDEVOPS_SOURCE_ACCESS_INTERACTIVE:-false}" == "true" && -t 0 ]] || return 2
 	print_info "Source-access broker provisioning requires one sudo confirmation"
+	/usr/bin/sudo -k
 	/usr/bin/sudo -v || return 1
 	return 0
-}
-
-_source_access_privilege_cached() {
-	[[ -x /usr/bin/sudo ]] || return 1
-	/usr/bin/sudo -n /usr/bin/true >/dev/null 2>&1
-	return $?
 }
 
 _source_access_privileged() {
 	/usr/bin/sudo -n "$@"
 	return $?
+}
+
+_source_access_release_privilege() {
+	/usr/bin/sudo -k >/dev/null 2>&1 || true
+	return 0
 }
 
 _source_access_cleanup_staging() {
@@ -389,34 +386,38 @@ setup_source_access_broker() {
 		return 1
 	}
 	if _source_access_broker_current "$repo_root" "$tag_commit" && _source_access_trust_current; then
-		if ! _source_access_privilege_cached; then
-			print_success "Source-access broker matches signed release ${tag_commit:0:12}"
-			return 0
-		fi
-		if _source_access_privileged /usr/bin/python3 -I -B "$helper_path" trust-check >/dev/null; then
-			print_success "Source-access broker matches signed release ${tag_commit:0:12}"
-			return 0
-		fi
-		print_warning "Source-access signing trust needs privileged reconciliation"
+		print_success "Source-access broker matches signed release ${tag_commit:0:12}"
+		return 0
 	fi
 
 	_source_access_acquire_privilege || privilege_rc=$?
 	if [[ "$privilege_rc" -ne 0 ]]; then
-		print_warning "Source-access broker deferred; run aidevops update from an interactive terminal"
+		print_warning "Source-access broker deferred; run aidevops setup --scope source-access from an interactive terminal"
 		return "$privilege_rc"
 	fi
 	if ! _source_access_broker_current "$repo_root" "$tag_commit"; then
 		print_info "Installing source-access broker directly from signed release ${tag_commit:0:12}"
-		_source_access_install_broker_files "$repo_root" "$tag_commit" || return 1
+		if ! _source_access_install_broker_files "$repo_root" "$tag_commit"; then
+			_source_access_release_privilege
+			return 1
+		fi
 	fi
 
 	_source_access_setup_trust || trust_rc=$?
 	if [[ "$trust_rc" -eq 2 ]]; then
-		print_warning "Source-access trust setup needs an interactive terminal; rerun aidevops update there"
+		_source_access_release_privilege
+		print_warning "Source-access trust setup needs an interactive terminal; run aidevops setup --scope source-access there"
 		return 2
 	fi
-	[[ "$trust_rc" -eq 0 ]] || return 1
-	_source_access_privileged /usr/bin/python3 -I -B "$helper_path" trust-check >/dev/null || return 1
+	if [[ "$trust_rc" -ne 0 ]]; then
+		_source_access_release_privilege
+		return 1
+	fi
+	if ! _source_access_privileged /usr/bin/python3 -I -B "$helper_path" trust-check >/dev/null; then
+		_source_access_release_privilege
+		return 1
+	fi
+	_source_access_release_privilege
 	print_success "Source-access broker installed and verified from signed release ${tag_commit:0:12}"
 	return 0
 }

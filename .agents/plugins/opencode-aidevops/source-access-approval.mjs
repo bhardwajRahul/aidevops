@@ -13,6 +13,7 @@ import {
   mkdtempSync,
   openSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   statSync,
@@ -31,10 +32,13 @@ import {
 export const SOURCE_ACCESS_REASON = "secret-bearing basename";
 const RECEIPT_SCHEMA = "aidevops-source-access-receipt/v1";
 const PAYLOAD_SCHEMA = "aidevops-source-access-approval/v1";
+const MANIFEST_RECEIPT_SCHEMA = "aidevops-source-access-receipt/v2";
+const MANIFEST_PAYLOAD_SCHEMA = "aidevops-source-access-approval/v2";
 const SIGNATURE_NAMESPACE = "aidevops-source-access-v1";
 const SIGNER_IDENTITY = "source-access@aidevops.sh";
 const MAX_TTL_SECONDS = 12 * 60 * 60;
 const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
+const MAX_MANIFEST_ENTRIES = 32;
 const DEFAULT_STATE_DIR = "/var/run/aidevops/source-access";
 const DEFAULT_PUBLIC_KEY = "/etc/aidevops/source-access/source-access.pub";
 const ROOT_BROKER_CORE = "/etc/aidevops/source-access/source_access_core.py";
@@ -148,7 +152,7 @@ function approvalScopeId(sessionId, uid, filePath, reason) {
     .digest("hex");
 }
 
-function isGitTrackedFile(filePath, git, run = execFileSync) {
+function trackedFileIdentity(filePath, git, run = execFileSync) {
   try {
     const gitRoot = realpathSync(
       String(
@@ -166,10 +170,24 @@ function isGitTrackedFile(filePath, git, run = execFileSync) {
       stdio: ["ignore", "ignore", "ignore"],
       timeout: 15000,
     });
-    return true;
+    return { repoRoot: gitRoot, relativePath };
   } catch {
     return false;
   }
+}
+
+function isGitTrackedFile(filePath, git, run = execFileSync) {
+  return Boolean(trackedFileIdentity(filePath, git, run));
+}
+
+function repositoryId(repoRoot) {
+  return createHash("sha256").update(repoRoot, "utf8").digest("hex");
+}
+
+function manifestScopeId(sessionId, uid, repoRoot, reason, paths) {
+  return createHash("sha256")
+    .update([sessionId, String(uid), repoRoot, reason, ...paths].join("\0"), "utf8")
+    .digest("hex");
 }
 
 function verificationTempRoot() {
@@ -217,7 +235,7 @@ function requireValidReceipt(condition) {
   if (!condition) throw new Error("source-access receipt is invalid");
 }
 
-function validatedReceipt(options) {
+function validatedSingleReceipt(options) {
   const {
     sessionId,
     filePath,
@@ -273,6 +291,130 @@ function validatedReceipt(options) {
   requireValidReceipt(typeof receipt.signature === "string");
   requireValidReceipt(receipt.signature.includes("SSH SIGNATURE"));
   return {payload, publicKeyPath, receipt, run, snapshotPath, sshKeygen};
+}
+
+function validatedManifestReceipt(options) {
+  const {
+    sessionId,
+    filePath,
+    reason,
+    repositoryDir = "",
+    now = Math.floor(Date.now() / 1000),
+    uid = typeof process.getuid === "function" ? process.getuid() : -1,
+    trustUid = 0,
+    stateDir = DEFAULT_STATE_DIR,
+    publicKeyPath = DEFAULT_PUBLIC_KEY,
+    sshKeygen = "/usr/bin/ssh-keygen",
+    git = "/usr/bin/git",
+    gitRun = execFileSync,
+    run = execFileSync,
+  } = options;
+  requireValidReceipt(/^[A-Za-z0-9._:-]{6,256}$/.test(sessionId));
+  requireValidReceipt(reason === SOURCE_ACCESS_REASON);
+  requireValidReceipt(uid >= 0);
+  requireValidReceipt(isAbsolute(filePath));
+  requireValidReceipt(!hasSymlinkComponent(filePath));
+  const canonicalPath = realpathSync(filePath);
+  const requestedIdentity = trackedFileIdentity(canonicalPath, git, gitRun);
+  requireValidReceipt(requestedIdentity);
+  if (repositoryDir) requireValidReceipt(realpathSync(repositoryDir) === requestedIdentity.repoRoot);
+  const approvalsDir = join(stateDir, "approvals", String(uid));
+  requireValidReceipt(trustedDirectory(approvalsDir, trustUid));
+  requireValidReceipt(trustedDirectory(dirname(publicKeyPath), trustUid));
+  requireValidReceipt(trustedRegularFile(publicKeyPath, trustUid));
+  const receiptNames = readdirSync(approvalsDir)
+    .filter((name) => /^[a-f0-9]{64}\.json$/.test(name))
+    .sort();
+  for (const receiptName of receiptNames) {
+    try {
+      const receiptPath = join(approvalsDir, receiptName);
+      requireValidReceipt(trustedRegularFile(receiptPath, trustUid));
+      const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
+      const payload = receipt?.payload;
+      requireValidReceipt(receipt?.schema === MANIFEST_RECEIPT_SCHEMA);
+      requireValidReceipt(payload?.schema === MANIFEST_PAYLOAD_SCHEMA);
+      requireValidReceipt(payload.session_id === sessionId);
+      requireValidReceipt(payload.uid === uid);
+      requireValidReceipt(payload.reason === reason);
+      requireValidReceipt(
+        Array.isArray(payload.entries) &&
+          payload.entries.length >= 2 &&
+          payload.entries.length <= MAX_MANIFEST_ENTRIES,
+      );
+      let totalBytes = 0;
+      const normalizedEntries = payload.entries.map((entry) => {
+        requireValidReceipt(entry && typeof entry === "object");
+        requireValidReceipt(isAbsolute(entry.path));
+        requireValidReceipt(!hasSymlinkComponent(entry.path));
+        const path = realpathSync(entry.path);
+        const identity = trackedFileIdentity(path, git, gitRun);
+        requireValidReceipt(identity);
+        requireValidReceipt(identity.repoRoot === requestedIdentity.repoRoot);
+        requireValidReceipt(entry.path === path);
+        requireValidReceipt(entry.relative_path === identity.relativePath);
+        requireValidReceipt(/^[a-f0-9]{64}$/.test(entry.content_sha256 || ""));
+        const metadata = statSync(path);
+        totalBytes += metadata.size;
+        requireValidReceipt(totalBytes <= MAX_SOURCE_BYTES);
+        requireValidReceipt(sourceDigestMatches(path, entry.content_sha256));
+        return { entry, path, relativePath: identity.relativePath };
+      });
+      const sortedRelativePaths = normalizedEntries.map(({relativePath}) => relativePath).sort();
+      requireValidReceipt(
+        normalizedEntries.every(({relativePath}, index) => relativePath === sortedRelativePaths[index]),
+      );
+      const paths = normalizedEntries.map(({path}) => path);
+      requireValidReceipt(new Set(paths).size === paths.length);
+      const approvalId = manifestScopeId(
+        sessionId,
+        uid,
+        requestedIdentity.repoRoot,
+        reason,
+        paths,
+      );
+      requireValidReceipt(payload.approval_id === approvalId);
+      requireValidReceipt(payload.request_id === approvalId);
+      requireValidReceipt(receiptName === `${approvalId}.json`);
+      requireValidReceipt(payload.repo_root === requestedIdentity.repoRoot);
+      requireValidReceipt(payload.repository_id === repositoryId(requestedIdentity.repoRoot));
+      let approvedPath = "";
+      for (const {entry, path} of normalizedEntries) {
+        const entryId = createHash("sha256").update(path, "utf8").digest("hex").slice(0, 32);
+        const snapshotPath = join(
+          stateDir,
+          "snapshots",
+          String(uid),
+          `${approvalId}-${entryId}.source`,
+        );
+        requireValidReceipt(entry.snapshot_path === snapshotPath);
+        requireValidReceipt(trustedDirectory(dirname(snapshotPath), trustUid));
+        requireValidReceipt(trustedRegularFile(snapshotPath, trustUid));
+        requireValidReceipt(statSync(snapshotPath).size <= MAX_SOURCE_BYTES);
+        requireValidReceipt(fileSha256(snapshotPath) === entry.content_sha256);
+        if (path === canonicalPath) approvedPath = snapshotPath;
+      }
+      requireValidReceipt(approvedPath);
+      requireValidReceipt(Number.isInteger(payload.issued_at));
+      requireValidReceipt(Number.isInteger(payload.expires_at));
+      requireValidReceipt(now >= payload.issued_at);
+      requireValidReceipt(now < payload.expires_at);
+      requireValidReceipt(payload.expires_at - payload.issued_at <= MAX_TTL_SECONDS);
+      requireValidReceipt(typeof receipt.signature === "string");
+      requireValidReceipt(receipt.signature.includes("SSH SIGNATURE"));
+      return {payload, publicKeyPath, receipt, run, snapshotPath: approvedPath, sshKeygen};
+    } catch {
+      // A malformed or unrelated receipt cannot broaden access; try another exact manifest.
+    }
+  }
+  throw new Error("source-access receipt is invalid");
+}
+
+function validatedReceipt(options) {
+  try {
+    return validatedSingleReceipt(options);
+  } catch {
+    return validatedManifestReceipt(options);
+  }
 }
 
 function verifyReceiptSignature({payload, publicKeyPath, receipt, run, snapshotPath, sshKeygen}) {
@@ -335,6 +477,7 @@ export function checkSecretReadWithApproval({
   args,
   sessionId,
   scriptsDir,
+  repositoryDir,
   isReadTool,
   secretReadBlockReason,
   checkSecretReadGate,
@@ -363,7 +506,9 @@ export function checkSecretReadWithApproval({
   }
 
   const brokerCurrent = brokerMatchesCurrentRelease(brokerMatches, scriptsDir);
-  const approval = brokerCurrent ? verify({ sessionId, filePath, reason }) : false;
+  const approval = brokerCurrent
+    ? verify({ sessionId, filePath, reason, repositoryDir })
+    : false;
   if (applyApprovedRead(args, approval, filePath, log)) return;
 
   const requestId = requestApprovalId({ brokerCurrent, filePath, reason, requestRun, sessionId });

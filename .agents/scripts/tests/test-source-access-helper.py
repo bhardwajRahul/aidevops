@@ -44,10 +44,20 @@ class SourceAccessHelperTests(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.repo), "init", "--quiet"], check=True)
         self.source = self.repo / "secret-helper.sh"
         self.other_source = self.repo / "secret-other.sh"
+        self.third_source = self.repo / "secret-third.sh"
         self.source.write_text("#!/usr/bin/env bash\nprintf synthetic\\n\n", encoding="utf-8")
         self.other_source.write_text("#!/usr/bin/env bash\nprintf other\\n\n", encoding="utf-8")
+        self.third_source.write_text("#!/usr/bin/env bash\nprintf third\\n\n", encoding="utf-8")
         subprocess.run(
-            ["git", "-C", str(self.repo), "add", self.source.name, self.other_source.name],
+            [
+                "git",
+                "-C",
+                str(self.repo),
+                "add",
+                self.source.name,
+                self.other_source.name,
+                self.third_source.name,
+            ],
             check=True,
         )
         self.uid = os.getuid()
@@ -126,6 +136,121 @@ class SourceAccessHelperTests(unittest.TestCase):
         snapshot_path = Path(str(payload["snapshot_path"]))
         self.assertEqual(snapshot_path.read_bytes(), self.source.read_bytes())
         self.assertEqual(snapshot_path.stat().st_mode & 0o777, 0o444)
+
+    def test_one_manifest_approves_three_exact_paths_with_one_confirmation(self) -> None:
+        request_id = HELPER.create_manifest_request(
+            self.config,
+            HELPER.ManifestRequestSpec(
+                session_id=self.session,
+                uid=self.uid,
+                home=self.home,
+                paths=(str(self.third_source), str(self.source), str(self.other_source)),
+                reason=HELPER.OVERRIDABLE_REASON,
+                now=self.now,
+            ),
+        )
+        confirmations = 0
+
+        def confirm(request: dict[str, object]) -> bool:
+            nonlocal confirmations
+            confirmations += 1
+            self.assertEqual(len(request["entries"]), 3)  # type: ignore[arg-type]
+            return True
+
+        payload = HELPER.approve_request(
+            self.config,
+            HELPER.ApprovalSpec(
+                request_id=request_id,
+                home=self.home,
+                expected_uid=self.uid,
+                ttl_seconds=HELPER.MAX_TTL_SECONDS,
+                now=self.now,
+                confirm=confirm,
+            ),
+        )
+        self.assertEqual(confirmations, 1)
+        self.assertEqual(len(payload["entries"]), 3)
+        approvals = HELPER.list_approvals(self.config, uid=self.uid, now=self.now + 1)
+        self.assertEqual(len(approvals), 1)
+        self.assertIn("(3 exact paths)", approvals[0]["path"])
+        for source in (self.source, self.other_source, self.third_source):
+            self.assertTrue(self._verify(path=str(source)))
+
+        extra_source = self.repo / "secret-extra.sh"
+        extra_source.write_text("extra\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.repo), "add", extra_source.name], check=True)
+        self.assertFalse(self._verify(path=str(extra_source)))
+
+        self.other_source.write_text("altered\n", encoding="utf-8")
+        self.assertFalse(self._verify(path=str(self.source)))
+        self.assertFalse(self._verify(path=str(self.other_source)))
+        self.other_source.write_text("#!/usr/bin/env bash\nprintf other\\n\n", encoding="utf-8")
+        self.assertTrue(self._verify(path=str(self.source)))
+        self.assertFalse(
+            self._verify(path=str(self.source), now=self.now + HELPER.MAX_TTL_SECONDS)
+        )
+
+        HELPER.revoke_approval(
+            self.config,
+            approval_id=str(payload["approval_id"]),
+            uid=self.uid,
+        )
+        for entry in payload["entries"]:  # type: ignore[union-attr]
+            self.assertFalse(Path(str(entry["snapshot_path"])).exists())
+        self.assertFalse(self._verify(path=str(self.source)))
+
+    def test_manifest_rejects_cross_repository_and_tampered_binding(self) -> None:
+        untracked_source = self.repo / "secret-untracked-manifest.sh"
+        untracked_source.write_text("untracked\n", encoding="utf-8")
+        with self.assertRaisesRegex(HELPER.SourceAccessError, "Git-tracked"):
+            HELPER.create_manifest_request(
+                self.config,
+                HELPER.ManifestRequestSpec(
+                    self.session,
+                    self.uid,
+                    self.home,
+                    (str(self.source), str(untracked_source)),
+                    HELPER.OVERRIDABLE_REASON,
+                    self.now,
+                ),
+            )
+
+        other_repo = self.root / "other-repo"
+        other_repo.mkdir()
+        subprocess.run(["git", "-C", str(other_repo), "init", "--quiet"], check=True)
+        foreign_source = other_repo / "secret-foreign.sh"
+        foreign_source.write_text("foreign\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(other_repo), "add", foreign_source.name], check=True)
+        with self.assertRaisesRegex(HELPER.SourceAccessError, "one Git worktree"):
+            HELPER.create_manifest_request(
+                self.config,
+                HELPER.ManifestRequestSpec(
+                    self.session,
+                    self.uid,
+                    self.home,
+                    (str(self.source), str(foreign_source)),
+                    HELPER.OVERRIDABLE_REASON,
+                    self.now,
+                ),
+            )
+
+        request_id = HELPER.create_manifest_request(
+            self.config,
+            HELPER.ManifestRequestSpec(
+                self.session,
+                self.uid,
+                self.home,
+                (str(self.source), str(self.other_source)),
+                HELPER.OVERRIDABLE_REASON,
+                self.now,
+            ),
+        )
+        request_path = self.config.request_root / f"{request_id}.json"
+        request = json.loads(request_path.read_text(encoding="utf-8"))
+        request["entries"][0]["relative_path"] = "substituted.sh"
+        request_path.write_bytes(HELPER.canonical_json(request) + b"\n")
+        with self.assertRaisesRegex(HELPER.SourceAccessError, "entries are invalid"):
+            self._approve(request_id)
 
     def test_request_is_reused_for_the_same_scope(self) -> None:
         first = self._request()

@@ -286,14 +286,28 @@ _run_update_setup_transaction() {
 }
 
 _run_update_source_access_reconciliation() {
-	local setup_script="${INSTALL_DIR}/setup.sh"
+	local broker_dir="/etc/aidevops/source-access"
+	local deployed_scripts="${_AIDEVOPS_REAL_HOME}/.aidevops/agents/scripts"
+	local broker_current=true
 
-	[[ -t 0 ]] || return 0
-	[[ -z "${AIDEVOPS_AUTO_UPDATE:-}" ]] || return 0
-	[[ "${AIDEVOPS_NON_INTERACTIVE:-false}" != "true" ]] || return 0
-	if ! AIDEVOPS_SOURCE_ACCESS_INTERACTIVE=true bash "$setup_script" --stage source-access; then
-		print_warning "Source-access broker provisioning remains deferred and fail-closed"
+	[[ -f "$deployed_scripts/source_access_core.py" ]] || return 0
+	[[ -f "$deployed_scripts/source-access-helper.py" ]] || return 0
+	[[ -f "$broker_dir/source_access_core.py" && ! -L "$broker_dir/source_access_core.py" ]] || broker_current=false
+	[[ -f "$broker_dir/source-access-helper.py" && ! -L "$broker_dir/source-access-helper.py" ]] || broker_current=false
+	[[ -f "$broker_dir/source-access.pub" && ! -L "$broker_dir/source-access.pub" ]] || broker_current=false
+	[[ -f "$broker_dir/source-access.trust" && ! -L "$broker_dir/source-access.trust" ]] || broker_current=false
+	[[ ! -w "$broker_dir" ]] || broker_current=false
+	[[ ! -w "$broker_dir/source_access_core.py" ]] || broker_current=false
+	[[ ! -w "$broker_dir/source-access-helper.py" ]] || broker_current=false
+	[[ ! -w "$broker_dir/source-access.pub" ]] || broker_current=false
+	[[ ! -w "$broker_dir/source-access.trust" ]] || broker_current=false
+	if [[ "$broker_current" == "true" ]] &&
+		/usr/bin/cmp -s "$deployed_scripts/source_access_core.py" "$broker_dir/source_access_core.py" &&
+		/usr/bin/cmp -s "$deployed_scripts/source-access-helper.py" "$broker_dir/source-access-helper.py"; then
+		return 0
 	fi
+
+	print_warning "AIDEVOPS_DEFERRED_ACTION action=source-access-reconcile command='aidevops setup --scope source-access'"
 	return 0
 }
 
@@ -308,7 +322,7 @@ _update_render_changelog() {
 	fi
 	echo ""
 	print_info "Changes since $current_version ($total_commits commits):"
-	git -C "$INSTALL_DIR" log --oneline --max-count=20 "$old_hash..$new_hash" || true
+	git -C "$INSTALL_DIR" --no-pager log --oneline --max-count=20 "$old_hash..$new_hash" || true
 	if [[ "$total_commits" -gt 20 ]]; then
 		echo "  ... and more (run 'git log --oneline' in $INSTALL_DIR for full list)"
 	fi
@@ -330,6 +344,17 @@ cmd_update_help() {
 }
 
 cmd_update() {
+	# Update is operational, not compositional. Do not let any reachable Git,
+	# package-manager, migration, or setup subprocess inherit an editor or pager.
+	# Local declarations restore the caller's environment when this function exits.
+	local EDITOR=/usr/bin/false
+	local VISUAL=/usr/bin/false
+	local GIT_EDITOR=/usr/bin/false
+	local GIT_SEQUENCE_EDITOR=/usr/bin/false
+	local GIT_PAGER=cat
+	local PAGER=cat
+	local GIT_TERMINAL_PROMPT=0
+	export EDITOR VISUAL GIT_EDITOR GIT_SEQUENCE_EDITOR GIT_PAGER PAGER GIT_TERMINAL_PROMPT
 	local skip_project_sync=false
 	local reconcile_repo_verify=false
 	local update_output_mode="${AIDEVOPS_OUTPUT_MODE:-auto}"
