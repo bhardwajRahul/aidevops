@@ -1294,6 +1294,10 @@ _check_ruleset_required_reviews_passing() {
 	required_count=$(_ruleset_required_review_count_for_default_branch "$repo_slug" "$default_branch") || return 1
 	[[ "$required_count" =~ ^[0-9]+$ ]] || required_count=0
 	[[ "$required_count" -eq 0 ]] && return 0
+	if [[ -z "$pr_author" ]]; then
+		echo "[pulse-merge] _check_ruleset_required_reviews_passing: PR #${pr_number} in ${repo_slug} has no verifiable author — failing closed (GH#30586)" >>"$LOGFILE"
+		return 1
+	fi
 
 	local reviews_pages="" approved_count="" empty_string=""
 	reviews_pages=$(_pmrc_gh_read gh api "repos/${repo_slug}/pulls/${pr_number}/reviews?per_page=100" --paginate --slurp 2>/dev/null) || reviews_pages=""
@@ -1301,21 +1305,47 @@ _check_ruleset_required_reviews_passing() {
 		echo "[pulse-merge] _check_ruleset_required_reviews_passing: review fetch failed for PR #${pr_number} in ${repo_slug} with ruleset requiring ${required_count} approval(s) — failing closed (GH#24577)" >>"$LOGFILE"
 		return 1
 	fi
+	# #aidevops:trust-boundary — count only each reviewer's latest substantive
+	# decision. COMMENTED submissions do not change GitHub's approval state, while
+	# malformed state-changing reviews must keep ruleset admission fail-closed.
 	approved_count=$(jq -er --arg author "$pr_author" --arg empty "$empty_string" \
-		--arg array_type "$PMRC_JSON_ARRAY" --arg object_type "$PMRC_JSON_OBJECT" '
+		--arg array_type "$PMRC_JSON_ARRAY" --arg object_type "$PMRC_JSON_OBJECT" \
+		--arg number_type "$PMRC_JSON_NUMBER" --arg string_type "$PMRC_JSON_STRING" '
+		def review_state:
+			(.state // $empty) | if type == $string_type then . else error("invalid review state") end;
+		def state_changing:
+			. == "APPROVED" or . == "CHANGES_REQUESTED" or . == "DISMISSED";
+		def known_state:
+			state_changing or . == "COMMENTED" or . == "PENDING";
+		($author | ascii_downcase) as $author_login |
 		if type != $array_type or any(.[]; type != $array_type) or any(.[][]?; type != $object_type) then
 			error("invalid paginated reviews response")
+		elif any(.[][]?;
+			((review_state | known_state) | not)
+			or ((review_state | state_changing) and (
+				(.user | type) != $object_type
+				or (.user.login | type) != $string_type
+				or (.user.login | length) == 0
+				or (.submitted_at | type) != $string_type
+				or (.submitted_at | length) == 0
+				or ((try (.submitted_at | fromdateiso8601) catch null) == null)
+				or (.id | type) != $number_type
+				or .id <= 0
+				or (.id | floor) != .id
+			))
+		) then
+			error("malformed state-changing review")
 		else
-			[.[][]? | {
-				login: (.user.login // $empty),
-				state: (.state // $empty),
-				submitted_at: (.submitted_at // $empty),
+			[.[][]? | review_state as $state | select($state | state_changing) | {
+				login: ((.user.login // $empty) | ascii_downcase),
+				state: $state,
+				submitted_epoch: ((.submitted_at // $empty) | fromdateiso8601),
 				id: (.id // 0)
 			} | select(.login != $empty)]
 			| group_by(.login)
-			| map(max_by([.submitted_at, .id]))
-			| map(select(.login != $author))
-			| map(select((.state | ascii_upcase) == "APPROVED"))
+			| map(max_by([.submitted_epoch, .id]))
+			| map(select(.login != $author_login))
+			| map(select(.state == "APPROVED"))
 			| length
 		end
 	' <<<"$reviews_pages" 2>/dev/null) || approved_count=""
