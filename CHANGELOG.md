@@ -10,6 +10,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.289] - 2026-08-24
+
+### Added
+
+- add trusted-local model replay posture
+- harden historical model replay benchmark
+
+### Changed
+
+- Documentation: bind exact-tip release aggregation
+- Documentation: bind exact-tip release aggregation
+- Documentation: bind exact-tip release aggregation
+- Documentation: bind exact-tip release aggregation (#30628)
+- Performance: reduce dependency graph parsing in one jq pass
+
+### Fixed
+
+- detect env-prefixed gh writes
+- bound merge writes and reconcile timeouts
+- reconcile worker origin after watchdog recovery
+- preserve substantive review decisions
+- skip deleted shell files in release preflight
+- allow explicit reserved release migration
+- skip Renovate Dependency Dashboards
+- preserve continuity across tier replacement
+- trust native PR body closing targets
+- admit trusted review repair candidates
+- bound GitHub hot-path operations
+- scope mirror provenance to helper workflows
+- local-only routines repos never dispatched, scaffold discards user routines
+- redact Google OAuth client secrets
+- exempt CI and conflict repairs from PR backlog cap
+- surface model replay egress failures
+- preserve blocked worker outcomes (#30604)
+- reject duplicate runtime bundle manifest keys (#30601)
+
 ## [3.32.288] - 2026-08-23
 
 ### Fixed
