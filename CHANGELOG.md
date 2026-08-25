@@ -10,6 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.290] - 2026-08-25
+
+### Added
+
+- initialize CodeGraph for dispatched worktrees
+- automate exact-tip aggregation successors (#30669)
+
+### Changed
+
+- Maintenance: aggregate v3.32.290 release sources
+- Tests: repair headless runtime completion tests
+- Maintenance: mark t18305 complete (pr:#30653 completed:2026-08-24) (#30652)
+
+### Fixed
+
+- use PR base for merge hygiene checkout (#30670)
+- make qlty scan uncertainty explicit (#30667)
+- type Anthropic fallback credentials
+- preserve auth failures as infrastructure retries
+- bound failed singleflight lease reclaim
+
 ## [3.32.289] - 2026-08-24
 
 ### Added
