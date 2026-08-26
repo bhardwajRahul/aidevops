@@ -10,6 +10,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.291] - 2026-08-26
+
+### Changed
+
+- Maintenance: aggregate v3.32.291 release sources
+- Documentation: tighten planning publication lifecycle (#30779)
+- GH#30756 GH#30757 GH#30758: fix planning PR publication (#30771)
+- Maintenance: mark t18307 complete (pr:#30760 completed:2026-08-26) (#30762)
+- Refactor: extract approval continuity verification
+- Maintenance: mark t18308 complete (pr:#30754 completed:2026-08-25) (#30745)
+- Refactor: split merge worktree helpers (#30752)
+- Maintenance: sync ref:GH#30708 to TODO.md (#30707)
+- Maintenance: sync GitHub issue state to TODO.md [skip ci]
+
+### Fixed
+
+- bind approval continuity to stable timeline ordering
+- restore sync-workflows apply privacy fixture
+- prevent false complexity stall sweeps
+- align simplification dispatch authority
+- verify approvals before privileged retries
+- preflight external PR approval authorities
+- adopt verified fork cleanup receipts (#30754)
+- trust Poppins dependency update (#30751)
+- resolve trusted Secretlint update (#30743)
+- trust Source Serif Dependabot update (#30739)
+- allow trusted source-serif Dependabot updates (#30737)
+- trust IBM Plex Serif Dependabot update (#30731)
+- surface invalid model routing overrides (#30716)
+- skip cooling providers in configured models (#30715)
+- promote verified OpenCode 1.18.23 pin
+- suppress incomplete dependency findings
+- gate inactive launch accounting (#30698)
+- gate pulse queue underfill on live dispatch (#30694)
+
 ## [3.32.290] - 2026-08-25
 
 ### Added
