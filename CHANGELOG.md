@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.292] - 2026-08-27
+
+### Added
+
+- warn on oversized npm caches
+
+### Fixed
+
+- scan past blocked dispatch candidates (#30804)
+- bound TODO sync retry budget (#30802)
+- fix Pulse worktree precreation auth failures
+- classify failed worker launches (#30798)
+- classify triage comment write failures (#30796)
+- recover external issue trust metadata (#30795)
+- retry stale TODO sync snapshots (#30794)
+
 ## [3.32.291] - 2026-08-26
 
 ### Changed
