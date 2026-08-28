@@ -10,6 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.293] - 2026-08-28
+
+### Fixed
+
+- bound dependency traversal
+- confine Playwright MCP artifacts
+- type PR lookup uncertainty
+- classify explicit pre-edit targets
+- use immutable decline evidence
+- converge reopened debt lifecycle
+- shallow TODO sync clones (#30833)
+- normalize reopened large-file debt labels (#30830)
+- terminalize not-planned tasks (#30831)
+- recognize canonical self-hosting scopes (#30834)
+- make issue-sync first-match callers pipe-safe (#30832)
+- reconcile abandoned worker attempts
+- refresh idle supervisor dashboards hourly (#30813)
+
 ## [3.32.292] - 2026-08-27
 
 ### Added
