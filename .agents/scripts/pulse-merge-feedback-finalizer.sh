@@ -15,6 +15,7 @@ PULSE_FEEDBACK_ROUTE_NMR_LABEL="needs-maintainer-review"
 PULSE_FEEDBACK_ROUTE_OPEN_STATE="OPEN"
 PULSE_FEEDBACK_ROUTE_AVAILABLE_LABEL="status:available"
 PULSE_FEEDBACK_ROUTE_JSON_ARRAY_TYPE="array"
+PULSE_FEEDBACK_ROUTE_WORKER_TAKEOVER_LABEL="origin:worker-takeover"
 
 _PULSE_FEEDBACK_ROUTE_CONTEXT_KIND=""
 _PULSE_FEEDBACK_ROUTE_CONTEXT_HEAD=""
@@ -49,7 +50,19 @@ _feedback_route_labels_block_routing() {
 		return 0
 	fi
 	if _feedback_route_labels_include "$labels" "origin:interactive" \
-		&& ! _feedback_route_labels_include "$labels" "origin:worker-takeover"; then
+		&& ! _feedback_route_labels_include "$labels" "$PULSE_FEEDBACK_ROUTE_WORKER_TAKEOVER_LABEL"; then
+		return 0
+	fi
+	return 1
+}
+
+_feedback_route_labels_allow_worker_route() {
+	local labels="$1"
+	local ignore_hold="${2:-0}"
+
+	_feedback_route_labels_block_routing "$labels" "$ignore_hold" && return 1
+	if _feedback_route_labels_include "$labels" "origin:worker" \
+		|| _feedback_route_labels_include "$labels" "$PULSE_FEEDBACK_ROUTE_WORKER_TAKEOVER_LABEL"; then
 		return 0
 	fi
 	return 1
@@ -450,7 +463,7 @@ _feedback_route_issue_is_ready() {
 	_feedback_route_labels_include "$labels" "$source_label" || return 1
 	_feedback_route_labels_include "$labels" "origin:worker" || return 1
 	! _feedback_route_labels_include "$labels" "origin:interactive" || return 1
-	! _feedback_route_labels_include "$labels" "origin:worker-takeover" || return 1
+	! _feedback_route_labels_include "$labels" "$PULSE_FEEDBACK_ROUTE_WORKER_TAKEOVER_LABEL" || return 1
 	! _feedback_route_labels_include "$labels" "$PULSE_FEEDBACK_ROUTE_HOLD_LABEL" || return 1
 	! _feedback_route_labels_include "$labels" "$PULSE_FEEDBACK_ROUTE_NMR_LABEL" || return 1
 	[[ -z "$assignees" ]] || return 1
@@ -866,8 +879,21 @@ _feedback_route_close_and_finish() {
 	local close_rc=0
 	local close_snapshot_rc=0
 	local closed_by_this_call=0
+	local preclose_guard_rc=0
 
 	if [[ "$pr_state" == "$PULSE_FEEDBACK_ROUTE_OPEN_STATE" ]]; then
+		if [[ "$kind" == "review" && "${_PULSE_FEEDBACK_ROUTE_REVIEW_PRECLOSE_GUARD:-0}" == "1" ]]; then
+			if ! declare -F _review_feedback_route_preclose_allows >/dev/null 2>&1; then
+				preclose_guard_rc="${PULSE_FEEDBACK_ROUTE_DEFERRED_RC:-75}"
+			else
+				_review_feedback_route_preclose_allows "$pr_number" "$repo_slug" "$expected_head" || preclose_guard_rc=$?
+			fi
+			if [[ "$preclose_guard_rc" -ne 0 ]]; then
+				_feedback_route_hold_for_maintainer "$pr_number" "$repo_slug" "$linked_issue" \
+					"review readiness changed immediately before close; preserving remediated PR"
+				return $?
+			fi
+		fi
 		_feedback_route_gh_write pr close "$pr_number" --repo "$repo_slug" \
 			--comment "${close_comment}
 
@@ -987,7 +1013,7 @@ _feedback_route_prepare_finalization_snapshot() {
 			"${kind} route head drifted from ${expected_head} to ${current_head:-unknown}"
 		return $?
 	fi
-	if _feedback_route_labels_block_routing "$labels" 1; then
+	if ! _feedback_route_labels_allow_worker_route "$labels" 1; then
 		_feedback_route_defer "$pr_number" "$repo_slug" "$linked_issue" \
 			"current PR ownership labels prohibit ${kind} finalization"
 		return $?
@@ -1012,7 +1038,7 @@ _feedback_route_prepare_finalization_snapshot() {
 			return $?
 		fi
 	fi
-	if _feedback_route_labels_block_routing "$labels"; then
+	if ! _feedback_route_labels_allow_worker_route "$labels"; then
 		_feedback_route_defer "$pr_number" "$repo_slug" "$linked_issue" \
 			"current PR ownership labels prohibit ${kind} finalization"
 		return $?
@@ -1103,7 +1129,7 @@ _finalize_feedback_route() {
 			"${kind} route head changed after issue transition (${expected_head} to ${current_head:-unknown})"
 		return $?
 	fi
-	if _feedback_route_labels_block_routing "$labels"; then
+	if ! _feedback_route_labels_allow_worker_route "$labels"; then
 		_feedback_route_hold_for_maintainer "$pr_number" "$repo_slug" "$linked_issue" \
 			"PR ownership labels changed during ${kind} finalization"
 		return $?
