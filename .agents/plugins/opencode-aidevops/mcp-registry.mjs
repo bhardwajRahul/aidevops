@@ -11,6 +11,8 @@ import { delimiter, isAbsolute, join, relative, resolve } from "path";
 const IS_MACOS = platform() === "darwin";
 const MCP_WORKSPACE_MARKER = ".aidevops-mcp-workspace";
 const PLAYWRIGHT_MCP_PACKAGE = "@playwright/mcp@0.0.79";
+const PLAYWRITER_MCP_PACKAGE = "playwriter@0.5.0";
+const LEGACY_PLAYWRITER_MCP_PACKAGE = "playwriter@latest";
 
 /**
  * Build unique per-plugin MCP workspace metadata without creating files.
@@ -123,7 +125,7 @@ function getMcpRegistry() {
     {
       name: "playwriter",
       type: "local",
-      command: [...pkgRunnerParts, "playwriter@latest"],
+      command: [...pkgRunnerParts, PLAYWRITER_MCP_PACKAGE],
       eager: false,
       toolPattern: "playwriter_*",
       globallyEnabled: false,
@@ -445,6 +447,35 @@ function buildMcpConfigEntry(mcp, runtime) {
 }
 
 /**
+ * Identify the only Playwriter commands emitted by previous aidevops generators.
+ * @param {unknown} command
+ * @returns {boolean}
+ */
+function isPackageRunner(runner, name) {
+  if (runner === name) return true;
+  if (typeof runner !== "string" || !isAbsolute(runner)) return false;
+  return new RegExp(`[\\\\/]${name}$`).test(runner);
+}
+
+function isLegacyNpxPlaywriterCommand(command) {
+  if (!isPackageRunner(command[0], "npx")) return false;
+  if (command.length === 2) return command[1] === LEGACY_PLAYWRITER_MCP_PACKAGE;
+  if (command.length !== 3 || command[1] !== "-y") return false;
+  return command[2] === LEGACY_PLAYWRITER_MCP_PACKAGE;
+}
+
+function isLegacyBunPlaywriterCommand(command) {
+  if (command.length !== 3 || !isPackageRunner(command[0], "bun")) return false;
+  if (command[1] !== "x") return false;
+  return command[2] === LEGACY_PLAYWRITER_MCP_PACKAGE;
+}
+
+function isLegacyGeneratedPlaywriterCommand(command) {
+  if (!Array.isArray(command)) return false;
+  return isLegacyNpxPlaywriterCommand(command) || isLegacyBunPlaywriterCommand(command);
+}
+
+/**
  * Register a single MCP server in the config. Returns true if newly registered.
  * @param {object} mcp - MCP registry entry
  * @param {object} config - OpenCode Config object (mutable)
@@ -454,6 +485,14 @@ function registerSingleMcp(mcp, config, runtime) {
   if (!config.mcp[mcp.name] || mcp.alwaysOverwrite) {
     config.mcp[mcp.name] = buildMcpConfigEntry(mcp, runtime);
     return true;
+  }
+
+  // Replace only the package argument emitted by older aidevops generators.
+  // Relay and other custom Playwriter commands remain user-owned.
+  if (mcp.name === "playwriter"
+    && isLegacyGeneratedPlaywriterCommand(config.mcp[mcp.name].command)) {
+    const command = config.mcp[mcp.name].command;
+    command[command.indexOf(LEGACY_PLAYWRITER_MCP_PACKAGE)] = PLAYWRITER_MCP_PACKAGE;
   }
 
   // Runtime-activated MCPs must stay disconnected at startup, including when

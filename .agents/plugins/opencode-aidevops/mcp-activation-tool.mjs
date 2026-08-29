@@ -27,9 +27,20 @@ const PLAYWRIGHT_OUTPUT_TOOLS = new Set([
   "playwright_browser_take_screenshot",
 ]);
 
+const MCP_DIAGNOSTIC_UNAVAILABLE =
+  "diagnostic unavailable; use the documented secure CLI diagnostic path";
+const MCP_STATUS_VALUES = new Set(["connected", "connecting", "disabled", "error", "failed"]);
+
+function safeMcpStatusDiagnostic() {
+  // The OpenCode SDK currently types the /mcp response as unknown. Until it
+  // exposes a finite structured error code, every status-entry detail remains
+  // untrusted and must stay out of user-visible activation results.
+  return MCP_DIAGNOSTIC_UNAVAILABLE;
+}
+
 class McpFailedStatusError extends Error {
-  constructor(status) {
-    super(`MCP entered ${status} status`);
+  constructor(status, phase) {
+    super(`MCP entered ${status} status during ${phase}; ${safeMcpStatusDiagnostic()}`);
     this.name = "McpFailedStatusError";
   }
 }
@@ -52,7 +63,7 @@ async function callLifecycle(action, name, options) {
   }
 }
 
-async function waitForConnection(name, options) {
+async function waitForConnection(name, options, phase) {
   const statusMethod = options.client?.status;
   if (typeof statusMethod !== "function") return;
 
@@ -68,10 +79,11 @@ async function waitForConnection(name, options) {
       throw new Error(result.error.message || String(result.error));
     }
     const payload = result?.data ?? result;
-    status = payload?.[name]?.status || "unknown";
+    const statusEntry = payload?.[name];
+    status = MCP_STATUS_VALUES.has(statusEntry?.status) ? statusEntry.status : "unknown";
     if (status === "connected") return;
     if (["error", "failed"].includes(status)) {
-      throw new McpFailedStatusError(status);
+      throw new McpFailedStatusError(status, phase);
     }
     await pause(pollIntervalMs);
   } while (Date.now() < deadline);
@@ -101,10 +113,10 @@ async function recoverFailedConnection(name, options, statusError) {
   }
 
   try {
-    await waitForConnection(name, options);
+    await waitForConnection(name, options, "post-reset activation");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`${message} after one bounded reset`);
+    throw new Error(`${statusError.message}; ${message} after one bounded reset`);
   }
 }
 
@@ -265,7 +277,7 @@ export function createMcpActivationTool(tool, z, options) {
         await callLifecycle(action, name, options);
         if (action === "connect") {
           try {
-            await waitForConnection(name, options);
+            await waitForConnection(name, options, "initial activation");
           } catch (error) {
             if (!(error instanceof McpFailedStatusError)) throw error;
             await recoverFailedConnection(name, options, error);

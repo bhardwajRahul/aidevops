@@ -59,6 +59,98 @@ test("registers only the explicit browser MCP activation profiles", () => {
   assert.match(config.agent.playwright.prompt, /# Playwright MCP/);
 });
 
+test("pins legacy Playwriter commands while preserving custom commands", () => {
+  const legacyCommands = [
+    ["npx", "playwriter@latest"],
+    ["/opt/aidevops/bin/npx", "playwriter@latest"],
+    ["npx", "-y", "playwriter@latest"],
+    ["bun", "x", "playwriter@latest"],
+  ];
+
+  for (const command of legacyCommands) {
+    const playwriter = {
+      type: "local",
+      command: [...command],
+      enabled: true,
+      environment: { PLAYWRITER_RELAY: "local" },
+      timeout: 5_000,
+      customMetadata: { owner: "user" },
+    };
+    const config = {
+      mcp: { playwriter },
+      tools: { "playwriter_*": true },
+    };
+
+    registerMcpServers(config);
+
+    assert.strictEqual(config.mcp.playwriter, playwriter);
+    assert.equal(playwriter.command.at(-1), "playwriter@0.5.0");
+    assert.ok(!playwriter.command.includes("playwriter@latest"));
+    assert.equal(playwriter.enabled, false);
+    assert.deepEqual(playwriter.environment, { PLAYWRITER_RELAY: "local" });
+    assert.equal(playwriter.timeout, 5_000);
+    assert.deepEqual(playwriter.customMetadata, { owner: "user" });
+    assert.equal(config.tools["playwriter_*"], false);
+  }
+
+  const customConfig = {
+    mcp: {
+      playwriter: {
+        type: "local",
+        command: ["playwriter", "serve", "--port", "19988"],
+        enabled: true,
+      },
+    },
+    tools: { "playwriter_*": true },
+  };
+
+  registerMcpServers(customConfig);
+
+  assert.deepEqual(customConfig.mcp.playwriter.command, [
+    "playwriter", "serve", "--port", "19988",
+  ]);
+  assert.equal(customConfig.mcp.playwriter.enabled, false);
+  assert.equal(customConfig.tools["playwriter_*"], false);
+
+  const customLatestConfig = {
+    mcp: {
+      playwriter: {
+        type: "local",
+        command: ["npx", "playwriter@latest", "serve", "--port", "19988"],
+        enabled: true,
+      },
+    },
+    tools: { "playwriter_*": true },
+  };
+
+  registerMcpServers(customLatestConfig);
+
+  assert.deepEqual(customLatestConfig.mcp.playwriter.command, [
+    "npx", "playwriter@latest", "serve", "--port", "19988",
+  ]);
+  assert.equal(customLatestConfig.mcp.playwriter.enabled, false);
+  assert.equal(customLatestConfig.tools["playwriter_*"], false);
+
+  const customLatestWithYesConfig = {
+    mcp: {
+      playwriter: {
+        type: "local",
+        command: ["npx", "-y", "playwriter@latest", "serve", "--port", "19988"],
+        enabled: true,
+      },
+    },
+    tools: { "playwriter_*": true },
+  };
+
+  registerMcpServers(customLatestWithYesConfig);
+
+  assert.deepEqual(customLatestWithYesConfig.mcp.playwriter.command, [
+    "npx", "-y", "playwriter@latest", "serve", "--port", "19988",
+  ]);
+  assert.equal(customLatestWithYesConfig.mcp.playwriter.enabled, false);
+  assert.equal(customLatestWithYesConfig.tools["playwriter_*"], false);
+});
+
 test("migrates browser MCPs to disconnected and globally denied", () => {
   const runtime = createMcpSessionRuntime("/managed/workspace", {
     tempRoot: "/managed/tmp",
@@ -84,6 +176,8 @@ test("migrates browser MCPs to disconnected and globally denied", () => {
   registerMcpServers(config, { runtime });
 
   assert.equal(config.mcp.playwriter.enabled, false);
+  assert.ok(config.mcp.playwriter.command.includes("playwriter@0.5.0"));
+  assert.ok(!config.mcp.playwriter.command.includes("playwriter@latest"));
   assert.equal(config.mcp.playwright.enabled, false);
   assert.equal(config.mcp.playwright.command[0], "/bin/bash");
   assert.ok(config.mcp.playwright.command.includes(runtime.workspaces.playwright.directory));
@@ -517,7 +611,15 @@ test("limits failed-status recovery to one reset", async () => {
       async disconnect() { calls.push("disconnect"); },
       async status() {
         calls.push("status");
-        return { data: { playwriter: { status: "failed" } } };
+        const phase = calls.filter((call) => call === "status").length;
+        return {
+          data: {
+            playwriter: {
+              status: "failed",
+              error: phase === 1 ? "relay launch failed" : "protocol handshake failed",
+            },
+          },
+        };
       },
     },
     allowedNames: ["playwriter"],
@@ -526,7 +628,7 @@ test("limits failed-status recovery to one reset", async () => {
 
   assert.equal(
     await activation.execute({ action: "connect", name: "playwriter" }),
-    "Error: MCP connect failed for playwriter: MCP entered failed status after one bounded reset",
+    "Error: MCP connect failed for playwriter: MCP entered failed status during initial activation; diagnostic unavailable; use the documented secure CLI diagnostic path; MCP entered failed status during post-reset activation; diagnostic unavailable; use the documented secure CLI diagnostic path after one bounded reset",
   );
   assert.deepEqual(calls, ["connect", "status", "disconnect", "connect", "status"]);
 });
@@ -542,7 +644,7 @@ test("reports when failed-status reset is unavailable", async () => {
 
   assert.equal(
     await activation.execute({ action: "connect", name: "playwriter" }),
-    "Error: MCP connect failed for playwriter: MCP entered error status; bounded reset unavailable because OpenCode does not expose MCP disconnect in this runtime.",
+    "Error: MCP connect failed for playwriter: MCP entered error status during initial activation; diagnostic unavailable; use the documented secure CLI diagnostic path; bounded reset unavailable because OpenCode does not expose MCP disconnect in this runtime.",
   );
 });
 
@@ -565,9 +667,56 @@ test("reports failed-status reset errors without reconnecting", async () => {
 
   assert.equal(
     await activation.execute({ action: "connect", name: "playwriter" }),
-    "Error: MCP connect failed for playwriter: MCP entered failed status; bounded reset disconnect failed: reset unavailable",
+    "Error: MCP connect failed for playwriter: MCP entered failed status during initial activation; diagnostic unavailable; use the documented secure CLI diagnostic path; bounded reset disconnect failed: reset unavailable",
   );
   assert.deepEqual(calls, ["connect", "status", "disconnect"]);
+});
+
+test("never renders free-form failed-status diagnostics", async () => {
+  const activation = createMcpActivationTool(tool, z, {
+    client: {
+      async connect() {},
+      async status() {
+        return {
+          data: {
+            playwriter: {
+              status: "failed",
+              error: `PLAYWRITER_TOKEN=private-value Authorization: Bearer private-bearer {"cookie":"private-cookie","url":"https://example.invalid/?token=private-query"} ${"x".repeat(400)}`,
+              token: "must-not-be-serialized",
+            },
+          },
+        };
+      },
+    },
+    allowedNames: ["playwriter"],
+  });
+
+  const result = await activation.execute({ action: "connect", name: "playwriter" });
+  assert.match(result, /diagnostic unavailable; use the documented secure CLI diagnostic path/);
+  assert.doesNotMatch(
+    result,
+    /PLAYWRITER_TOKEN|private-value|private-bearer|private-cookie|private-query|must-not-be-serialized|example\.invalid/,
+  );
+  assert.match(result, /bounded reset unavailable/);
+});
+
+test("normalizes unknown status values before reporting a timeout", async () => {
+  const activation = createMcpActivationTool(tool, z, {
+    client: {
+      async connect() {},
+      async status() {
+        return { data: { playwriter: { status: "PLAYWRITER_TOKEN=private-value" } } };
+      },
+    },
+    allowedNames: ["playwriter"],
+    connectTimeoutMs: 1,
+    pollIntervalMs: 1,
+    pause: async () => new Promise((resolve) => setTimeout(resolve, 2)),
+  });
+
+  const result = await activation.execute({ action: "connect", name: "playwriter" });
+  assert.match(result, /last status: unknown/);
+  assert.doesNotMatch(result, /PLAYWRITER_TOKEN|private-value/);
 });
 
 test("does not reset status API errors or timeouts", async () => {

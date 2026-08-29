@@ -8,6 +8,7 @@ shared by both discovery scripts.
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025-2026 Marcus Quinn
 
+import os
 import platform
 import sys
 
@@ -31,6 +32,27 @@ LAZY_MCPS = {
 
 # Oh-My-OpenCode tool patterns to disable globally
 OMO_TOOL_PATTERNS = ['grep_app_*', 'websearch_*']
+PLAYWRITER_MCP_PACKAGE = 'playwriter@0.5.0'
+LEGACY_PLAYWRITER_MCP_PACKAGE = 'playwriter@latest'
+
+
+def _is_legacy_generated_playwriter_command(command):
+    """Return whether command is an exact prior generated Playwriter launcher."""
+    if not isinstance(command, list) or not command:
+        return False
+    runner = command[0]
+    is_runner = isinstance(runner, str) and (
+        runner == 'npx' or (os.path.isabs(runner) and os.path.basename(runner) == 'npx')
+    )
+    is_bun = isinstance(runner, str) and (
+        runner == 'bun' or (os.path.isabs(runner) and os.path.basename(runner) == 'bun')
+    )
+    return (
+        is_runner and command[1:] in (
+            [LEGACY_PLAYWRITER_MCP_PACKAGE],
+            ['-y', LEGACY_PLAYWRITER_MCP_PACKAGE],
+        )
+    ) or (is_bun and command[1:] == ['x', LEGACY_PLAYWRITER_MCP_PACKAGE])
 
 
 def apply_mcp_loading_policy(config):
@@ -75,16 +97,23 @@ def _register_playwriter(config, bun_path):
         if bun_path:
             config['mcp']['playwriter'] = {
                 "type": "local",
-                "command": ["bun", "x", "playwriter@latest"],
+                "command": ["bun", "x", PLAYWRITER_MCP_PACKAGE],
                 "enabled": False
             }
         else:
             config['mcp']['playwriter'] = {
                 "type": "local",
-                "command": ["npx", "playwriter@latest"],
+                "command": ["npx", PLAYWRITER_MCP_PACKAGE],
                 "enabled": False
             }
         print("  Added playwriter MCP (on demand - @playwriter only)")
+    elif isinstance(config['mcp']['playwriter'], dict):
+        playwriter_config = config['mcp']['playwriter']
+        command = playwriter_config.get('command')
+        if _is_legacy_generated_playwriter_command(command):
+            command[command.index(LEGACY_PLAYWRITER_MCP_PACKAGE)] = PLAYWRITER_MCP_PACKAGE
+            print("  Pinned legacy playwriter MCP command to 0.5.0")
+        playwriter_config['enabled'] = False
     config['tools']['playwriter_*'] = False
 
 
