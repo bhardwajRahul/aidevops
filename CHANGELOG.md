@@ -10,6 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.295] - 2026-08-30
+
+### Changed
+
+- Documentation: stage v3.32.295 release aggregation
+- Maintenance: sync ref:GH#30876 to TODO.md (#30869)
+- Refactor: simplify deployment copy helper (#30883)
+
+### Fixed
+
+- honor prompt guard warning exits in body sync
+- accept stdin body sentinel in platform helper
+- recover disk capacity before dispatch block (#30895)
+- verify Playwriter chat message authors (#30892)
+- preserve held availability (#30893)
+- let prompt guard scan read piped input
+- fix merged receipt adoption query
+- require write authority for remediation (#30890)
+- keep inactive NMR holds report-only (#30889)
+- prevent queue shortfall autofile loop (#30882)
+
 ## [3.32.294] - 2026-08-29
 
 ### Added
