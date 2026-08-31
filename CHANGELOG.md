@@ -10,6 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.296] - 2026-08-31
+
+### Changed
+
+- Documentation: stage v3.32.296 release aggregation
+
+### Fixed
+
+- keep generated framework issue bodies public-safe
+- preserve output finding category coverage
+- report missing agent intent coverage
+- expose mandatory discovery-tool readiness
+- Block direct gh pr merge outside lifecycle helpers
+- fail closed on malformed related files
+- bind recovery claims to archive identity
+- classify Secretlint scanner errors
+
 ## [3.32.295] - 2026-08-30
 
 ### Changed
