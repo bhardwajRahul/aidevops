@@ -10,6 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.297] - 2026-09-01
+
+### Changed
+
+- Documentation: bound recovery plans and follower-task classification
+- Refactor: split dispatch assignment guards (#30938)
+
+### Fixed
+
+- close fixture dependencies (#30961)
+- promote OpenCode 1.18.25 compatibility pin
+- classify zero-worker active claims (#30954)
+- narrow infrastructure advisory dispatch blocking
+- prevalidate runtime-risk evidence before Git mutation
+- fix trusted blocked release recognition
+- fix simplification brief Files Scope
+- exclude persistent dashboards from underfill (#30936)
+- defer protected-branch TODO publication (#30935)
+
 ## [3.32.296] - 2026-08-31
 
 ### Changed
