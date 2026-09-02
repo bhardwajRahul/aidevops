@@ -10,6 +10,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.299] - 2026-09-02
+
+### Added
+
+- Add executable managed GitHub create subcommands
+
+### Changed
+
+- Maintenance: update IBM Plex Sans to 5.3.0
+- Maintenance: update Hono to 4.13.5
+- Maintenance: update compatible GitHub Actions dependencies
+- Documentation: clarify extension QA capability routing (#31007)
+- Maintenance: defer unsupported file-type major updates (#30992)
+
+### Fixed
+
+- ignore signature footer URLs in issue path extraction
+- preserve source approvals across verified edits (#31040)
+- bound verbose successful output (#31036)
+- avoid redundant worktree claim after owner transfer
+- serialize fallback credential updates
+- normalize stdin body-file arrays in zsh (#31020)
+- reclaim safe recovery caches within deadline
+- preserve managed OpenCode web sessions safely
+- trust Courier Prime Dependabot update (#31010)
+- trust courier prime Dependabot update (#31005)
+- trust Ubuntu Mono Dependabot update (#31001)
+- trust Inter Dependabot update (#31000)
+- trust Mohave Dependabot update (#30980)
+- trust Mohave Dependabot update (#30982)
+- trust Tilt Neon Dependabot update (#30978)
+
 ## [3.32.298] - 2026-09-01
 
 ### Fixed
