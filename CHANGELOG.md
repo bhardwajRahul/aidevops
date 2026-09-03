@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.304] - 2026-09-04
+
+### Fixed
+
+- retain origin label failure diagnostics
+- align OpenAI pool setup guidance
+- fix guarded remote branch cleanup
+
 ## [3.32.303] - 2026-09-03
 
 ### Added
