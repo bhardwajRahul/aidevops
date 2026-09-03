@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.300] - 2026-09-03
+
+### Changed
+
+- Maintenance: aggregate v3.32.300 release sources
+
+### Fixed
+
+- trust fast-uri Dependabot update (#31046)
+
 ## [3.32.299] - 2026-09-02
 
 ### Added
