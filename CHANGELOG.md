@@ -10,6 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.303] - 2026-09-03
+
+### Added
+
+- add native GPT image output formats
+
+### Changed
+
+- Refactor: extract full-loop project validators (#31069)
+
+### Fixed
+
+- fix approval lifecycle label provisioning
+- reject invalid OpenCode Bash workdirs
+- refresh recovered PR metadata (#31071)
+- retry transient OpenCode validation (#31060)
+- Fix fast-uri high-severity audit failures
+
 ## [3.32.302] - 2026-09-03
 
 ### Fixed
