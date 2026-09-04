@@ -10,6 +10,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.307] - 2026-09-04
+
+### Added
+
+- detect stale runner broker sessions (#31142)
+
+### Changed
+
+- Refactor: split recovery cache policy (#31141)
+- Maintenance: mark t18395 complete (pr:#31142 completed:2026-09-04) (#31143)
+- Refactor: simplify Tabby profile sync (#31138)
+- Maintenance: sync ref:GH#31136 to TODO.md (#31137)
+- Refactor: simplify command policy matchers (#31140)
+- Refactor: simplify OpenAI provider auth flow (#31135)
+- Refactor: simplify repository layout migration (#31128)
+- Refactor: simplify MCP activation flow (#31127)
+- Maintenance: record completion proof for PR #31118
+- CI: advance deterministic Qlty CLI to 0.643.0
+
+### Fixed
+
+- preserve protected publication result (#31124)
+- normalize failed legacy intent (#31121)
+- reconcile signed merge summary bodies (#31114)
+- make OpenCode generator help observational (#31111)
+
 ## [3.32.306] - 2026-09-04
 
 ### Added
