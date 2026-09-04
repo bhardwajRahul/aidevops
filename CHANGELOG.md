@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.306] - 2026-09-04
+
+### Added
+
+- Add shared Gemini media browser agents
+
+### Changed
+
+- Maintenance: aggregate v3.32.306 release sources
+- Documentation: Document Buzz organization project onboarding
+- Documentation: document ranked YouTube description-link SEO experiments
+
+### Fixed
+
+- Report requested and native GPT image dimensions
+
 ## [3.32.305] - 2026-09-04
 
 ### Changed
