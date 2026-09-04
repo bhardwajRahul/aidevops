@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.308] - 2026-09-04
+
+### Added
+
+- make email facade exports explicit (#31160)
+- add Codacy health telemetry (#31159)
+
+### Changed
+
+- Maintenance: mark t18397 complete (pr:#31160 completed:2026-09-04) (#31166)
+
+### Fixed
+
+- eliminate validated subprocess findings (#31163)
+
 ## [3.32.307] - 2026-09-04
 
 ### Added
