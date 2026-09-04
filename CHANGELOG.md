@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.305] - 2026-09-04
+
+### Changed
+
+- Documentation: define Buzz VA server architecture
+- Documentation: document npm v12 security controls
+
+### Fixed
+
+- diagnose configured MCP versions (#31098)
+- run quality sweep after health failure (#31089)
+
 ## [3.32.304] - 2026-09-04
 
 ### Fixed
