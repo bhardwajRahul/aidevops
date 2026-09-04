@@ -517,11 +517,10 @@ _repo_registration_update_existing() {
 }
 
 # Register a repo in repos.json
-# Usage: register_repo <path> <version> <features>
+# Usage: register_repo <path> <version> <features> [verified-slug]
 register_repo() {
-	local repo_path="$1"
-	local version="$2"
-	local features="$3"
+	local repo_path="$1" version="$2" features="$3"
+	local verified_slug="${4:-}"
 
 	init_repos_file
 
@@ -551,9 +550,10 @@ register_repo() {
 	fi
 
 	# Auto-detect GitHub slug from git remote
-	local slug=""
-	local is_local_only="false"
-	if ! slug=$(get_repo_slug "$repo_path" 2>/dev/null); then
+	local slug="" is_local_only="false"
+	if [[ -n "$verified_slug" ]]; then
+		slug="$verified_slug"
+	elif ! slug=$(get_repo_slug "$repo_path" 2>/dev/null); then
 		slug=""
 		# No remote origin — mark as local_only
 		if ! git -C "$repo_path" remote get-url origin &>/dev/null; then
@@ -574,9 +574,7 @@ register_repo() {
 
 	local has_interface
 	has_interface=$(_repo_config_has_interface_value "$repo_path")
-	local cloudron_app_type="cloudron-package"
-	local app_type_default=""
-	local cloudron_defaults='{}'
+	local cloudron_app_type="cloudron-package" app_type_default="" cloudron_defaults='{}'
 	if [[ -f "${repo_path}/CloudronManifest.json" ]]; then
 		app_type_default="$cloudron_app_type"
 		cloudron_defaults='{"manifest":"CloudronManifest.json","release_workflow":".github/workflows/cloudron-package-release.yml","monitor_compatibility":true,"upstream_tag_prefixes":["v",""]}'
