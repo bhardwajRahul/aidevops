@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.309] - 2026-09-04
+
+### Changed
+
+- Maintenance: sync GitHub issue state to TODO.md [skip ci]
+
+### Fixed
+
+- redact named credentials across transcript hooks
+- keep secret-get stdout clean (#31174)
+- bind aggregation merge bodies to verified heads
+
 ## [3.32.308] - 2026-09-04
 
 ### Added
