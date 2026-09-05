@@ -10,26 +10,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.317] - 2026-09-05
+
 ### Added
 
-- Add opt-in Blender Lab MCP guidance and a pinned video-use runtime with render verification.
+- Integrate pinned video-use runtime and render verification
+- Add opt-in Blender Lab MCP support
 
 ### Changed
 
-- Enforce product-worker reservations with verified occupancy and conservative capacity borrowing.
-- Retire the global peak-hours worker cap and refresh callable-module, webhook, and architecture guidance.
-- Simplify the GitHub transport governor while preserving resource reservations and API deferral boundaries.
+- Maintenance: refresh complete aggregation after #31336
+- Documentation: prepare v3.32.317 release notes
+- Refactor: simplify GitHub transport governor (GH#31324) (#31330)
+- Tests: align worker-detection launch fixtures (#31318)
+- Documentation: brief compounding-value architecture and execution roadmap
+- Documentation: Document optional webhooks and contextual OS selection
+- Refactor: simplify failed launch recovery recording
 
 ### Fixed
 
-- Resume corrected blocked draft checkpoints with fenced ownership instead of restarting preserved work.
-- Distinguish GitHub API read-capacity deferrals from failed CI or malformed verification evidence.
-- Bind blocker recovery to allowlisted reasons and relevant brief or code revisions.
-- Reject release aggregations that inherit unreviewed default-branch commits after their reviewed snapshot.
-- Preserve initial-model fallback behavior and stabilize unchanged-base Qlty and worker-launch checks.
-- Propagate interactive claim failures and normalize reserved release-successor intent.
-- Align README and hero inventory counts with the callable module set.
-- Simplify failed launch recovery recording without weakening ownership evidence.
+- fix secret inventory cleanup lifetime
+- exclude runtime state from full-loop staging
+- Verify successor ref absence before creation
+- Normalize reserved intent for release successors
+- propagate interactive claim failures (#31319)
+- Preserve API deferral through full-loop verification
+- Align hero and README with callable module inventory
+- stabilize Qlty scan consensus (#31284)
+- fix initial-model preference fallback
+- Reject stale release aggregation merge bases
 
 ## [3.32.316] - 2026-09-05
 
