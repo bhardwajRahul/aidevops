@@ -62,6 +62,19 @@ _hrw_ownership_log() {
 	return 0
 }
 
+_hrw_verify_checkpoint_target() {
+	local ownership_helper="$1"
+	shift
+	local -a checkpoint_args=("$@")
+	# Keep legacy calls unchanged; transferred checkpoints carry the original
+	# author separately from the replacement issue owner.
+	if [[ -n "${AIDEVOPS_PR_CHECKPOINT_AUTHOR:-}" ]]; then
+		checkpoint_args+=("$AIDEVOPS_PR_CHECKPOINT_AUTHOR")
+	fi
+	"$ownership_helper" verify-pr-checkpoint-target "${checkpoint_args[@]}"
+	return $?
+}
+
 #######################################
 # Verify that a worker still owns its exact dispatch target. Issue workers use
 # their live assignment, direct PR workers use the exact open head, and draft
@@ -114,7 +127,7 @@ _hrw_verify_dispatch_ownership() {
 				_hrw_ownership_log error "incomplete PR checkpoint assignee contract issue=${issue_number} expected=${expected_assignee:-missing} worker=${WORKER_GITHUB_LOGIN:-missing}"
 				return 1
 			fi
-			target_output=$("$ownership_helper" verify-pr-checkpoint-target \
+			target_output=$(_hrw_verify_checkpoint_target "$ownership_helper" \
 				"$repair_pr_number" "$repo_slug" "$expected_head_sha" "$expected_head_ref" \
 				"$repair_linked_issue" "$expected_assignee" 2>&1) || target_rc=$?
 			if [[ "$target_rc" -ne 0 ]]; then
@@ -261,6 +274,7 @@ _hrw_prepare_role_context() {
 		unset WORKER_ISSUE_NUMBER WORKER_REPO_SLUG WORKER_WORKTREE_PATH \
 			WORKER_GITHUB_LOGIN WORKER_SESSION_KEY AIDEVOPS_WORKER_GITHUB_LOGIN \
 			DISPATCH_REPO_SLUG AIDEVOPS_DISPATCH_LEASE_TOKEN \
+			AIDEVOPS_PR_CHECKPOINT_SESSION AIDEVOPS_PR_CHECKPOINT_AUTHOR \
 			AIDEVOPS_DISPATCH_LEASE_DEVICE AIDEVOPS_ATTEMPT_ID \
 			AIDEVOPS_PARENT_WORKER_ID AIDEVOPS_ROOT_WORKER_ID AIDEVOPS_WORKER_ID \
 			AIDEVOPS_PERMISSION_GRANT_FILE AIDEVOPS_PERMISSION_REQUEST_ID \

@@ -17,6 +17,7 @@ from typing import Any, Optional
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import pulse_check_dependencies as dependency_scan
+import pulse_check_progress as progress_scan
 
 AGGREGATE_KEY = "aggregate"
 ERROR_KEY = "error"
@@ -55,6 +56,11 @@ def _empty_aggregate() -> dict[str, int]:
         "eligible_available_unassigned": 0,
         "excluded_persistent_dashboard": 0,
         "available_old": 0,
+        "no_durable_progress_hour": 0,
+        "oldest_issue_age_min": 0,
+        "oldest_durable_progress_age_min": 0,
+        "durable_progress_unknown": 0,
+        "external_wait_excluded": 0,
         "oldest_available_age_min": 0,
         "repos_with_available": 0,
         "queued": 0,
@@ -106,6 +112,18 @@ def _issue_age_minutes(issue: dict[str, Any], now: dt.datetime) -> int:
     return int((now - updated).total_seconds() // 60)
 
 
+def _durable_progress_age(slug: str, issue: dict[str, Any], now: dt.datetime) -> Optional[int]:
+    return progress_scan.durable_progress_age(slug, issue, now, _run_gh_json)
+
+
+def _count_durable_progress(aggregate: dict[str, int], slug: str,
+                            issue: dict[str, Any], now: dt.datetime) -> None:
+    context = progress_scan.ProgressContext(slug, _run_gh_json,
+                                            lambda probe: _dependency_diagnostic(slug, probe),
+                                            PERSISTENT_DASHBOARD_LABELS)
+    progress_scan.count_progress(aggregate, issue, now, context)
+
+
 def _load_repos(repos_json: pathlib.Path) -> tuple[list[dict[str, Any]], str]:
     try:
         data = json.loads(repos_json.read_text(encoding="utf-8"))
@@ -138,7 +156,7 @@ def _fetch_repo_issues(slug: str, max_issues: int) -> Optional[list[dict[str, An
         "--state", "open",
         "--label", "auto-dispatch",
         "--limit", str(max_issues + 1),
-        "--json", "number,title,body,labels,assignees,updatedAt",
+        "--json", "number,title,body,labels,assignees,createdAt,updatedAt",
     ]
     if _valid_repo_slug(slug):
         try:
@@ -251,6 +269,7 @@ def _scan_repo(
         inconsistent, scan_error = _dependency_diagnostic(slug, issue)
         issue["dependency_inconsistent"] = inconsistent
         aggregate[GH_ERRORS_KEY] += int(scan_error)
+        _count_durable_progress(aggregate, slug, issue, now)
     repo_available = sum(
         int(_count_issue(aggregate, issue, now, old_minutes))
         for issue in issues

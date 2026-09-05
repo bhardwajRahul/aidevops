@@ -2035,6 +2035,20 @@ _prrts_repair_linked_issue() {
 	return 0
 }
 
+_prrts_checkpoint_author() {
+	# Ordinary review repair has no checkpoint author contract.
+	return 0
+}
+
+_prrts_checkpoint_lease() {
+	# Never inherit a caller's unrelated issue lease into a direct PR worker.
+	return 0
+}
+
+_prrts_checkpoint_session() {
+	return 0
+}
+
 _prrts_worker_login() {
 	local pr_number="$1"
 	local worker_login=""
@@ -2541,6 +2555,25 @@ _prrts_launch_detached_worker() {
 	return 0
 }
 
+_prrts_prepare_dispatch_target() {
+	local repo_slug="$1" repo_path="$2" pr_number="$3" head_ref="$4" head_oid="$5" path_var="$6"
+	if [[ ! -x "$HEADLESS_RUNTIME_HELPER" ]]; then
+		_prrts_log "dispatch: headless-runtime-helper missing or not executable: ${HEADLESS_RUNTIME_HELPER}"
+		return 1
+	fi
+	if ! _prrts_worker_login "$pr_number" >/dev/null; then
+		_prrts_log "dispatch: authenticated GitHub worker identity unavailable for ${repo_slug}#${pr_number}; launch blocked"
+		return 1
+	fi
+	_prrts_prepare_worker_worktree "$repo_slug" "$repo_path" "$pr_number" "$head_ref" "$head_oid" "$path_var" || return 1
+	if ! _prrts_prelaunch_target_fence "$repo_slug" "$pr_number" "$head_ref" "$head_oid"; then
+		PRRTS_WORKTREE_FAILURE_BLOCKED_BY="$PRRTS_BLOCKED_BY_CODE"
+		[[ -n "$PRRTS_WORKTREE_FAILURE_REASON" ]] || PRRTS_WORKTREE_FAILURE_REASON="pr_target_eligibility_changed_before_launch"
+		return 1
+	fi
+	return 0
+}
+
 _prrts_dispatch_worker() {
 	local repo_slug="$1"
 	local repo_path="$2"
@@ -2559,22 +2592,12 @@ _prrts_dispatch_worker() {
 	PRRTS_WORKTREE_FAILURE_REASON="review_worker_launch_failed"
 	_prrts_prepare_thread_batch "$repo_slug" "$pr_number" "$thread_count" "$fingerprint" \
 		batch_fingerprint batch_thread_count || return 1
-	if [[ ! -x "$HEADLESS_RUNTIME_HELPER" ]]; then
-		_prrts_log "dispatch: headless-runtime-helper missing or not executable: ${HEADLESS_RUNTIME_HELPER}"
-		return 1
-	fi
-	if ! worker_login=$(_prrts_worker_login "$pr_number"); then
-		_prrts_log "dispatch: authenticated GitHub worker identity unavailable for ${repo_slug}#${pr_number}; launch blocked"
-		return 1
-	fi
-	if ! _prrts_prepare_worker_worktree "$repo_slug" "$repo_path" "$pr_number" "$head_ref" "$head_oid" worker_worktree_path; then
-		return 1
-	fi
-	if ! _prrts_prelaunch_target_fence "$repo_slug" "$pr_number" "$head_ref" "$head_oid"; then
-		PRRTS_WORKTREE_FAILURE_BLOCKED_BY="$PRRTS_BLOCKED_BY_CODE"
-		[[ -n "$PRRTS_WORKTREE_FAILURE_REASON" ]] || PRRTS_WORKTREE_FAILURE_REASON="pr_target_eligibility_changed_before_launch"
-		return 1
-	fi
+	_prrts_prepare_dispatch_target "$repo_slug" "$repo_path" "$pr_number" "$head_ref" "$head_oid" worker_worktree_path || return 1
+	# The checkpoint fence may transfer the issue to this runner. Do not export
+	# the pre-transfer login captured before worktree preparation.
+	worker_login=$(_prrts_worker_login "$pr_number") || return 1
+	local checkpoint_author=""
+	checkpoint_author=$(_prrts_checkpoint_author) || return 1
 	worker_task=$(_prrts_worker_task_id "$pr_number") || worker_task=""
 	repair_linked_issue=$(_prrts_repair_linked_issue "$pr_number") || repair_linked_issue=""
 	[[ -n "$worker_task" ]] || return 1
@@ -2598,6 +2621,7 @@ _prrts_dispatch_worker() {
 		"HEADLESS=1"
 		"WORKER_ISSUE_NUMBER=${worker_task}"
 		"WORKER_REPO_SLUG=${repo_slug}"
+		"DISPATCH_REPO_SLUG=${repo_slug}"
 		"WORKER_GITHUB_LOGIN=${worker_login}"
 		"WORKER_WORKTREE_PATH=${worker_worktree_path}"
 		"GITHUB_REPOSITORY=${repo_slug}"
@@ -2612,6 +2636,9 @@ _prrts_dispatch_worker() {
 		"AIDEVOPS_PR_REPAIR_NUMBER=${pr_number}"
 		"AIDEVOPS_PR_REPAIR_LINKED_ISSUE=${repair_linked_issue}"
 		"AIDEVOPS_PR_REPAIR_ISSUE_ASSIGNEE=${worker_login}"
+		"AIDEVOPS_PR_CHECKPOINT_AUTHOR=${checkpoint_author}"
+		"AIDEVOPS_DISPATCH_LEASE_TOKEN=$(_prrts_checkpoint_lease)"
+		"AIDEVOPS_PR_CHECKPOINT_SESSION=$(_prrts_checkpoint_session)"
 		"AIDEVOPS_PR_REPAIR_HEAD_SHA=${head_oid}"
 		"AIDEVOPS_PR_REPAIR_HEAD_REF=${head_ref}"
 		"AIDEVOPS_HEADLESS_OUTCOME_FILE=${outcome_file}"
