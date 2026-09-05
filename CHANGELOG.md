@@ -10,9 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.313] - 2026-09-05
+
 ### Changed
 
-- Record reviewed release-source provenance for the standard-tier local release handoff (PR #31224), first included in v3.32.311.
+- Documentation: Aggregate standard-tier release provenance
 
 ## [3.32.312] - 2026-09-05
 
