@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.327] - 2026-09-06
+
+### Changed
+
+- Documentation: document Cloudflare crawler allow policy
+
+### Fixed
+
+- verify bounded operation supervisor execution (#31428)
+- report worker productivity without triage inflation
+
 ## [3.32.326] - 2026-09-06
 
 ### Fixed
