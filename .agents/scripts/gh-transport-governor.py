@@ -138,14 +138,19 @@ def execute(executable: str, args: list[str], output, environment: dict[str, str
 
 
 def _acquire(budget: Budget, resource: str) -> str:
-    # Queue briefly for local admission, never retry HTTP or a mutation.
-    for admission_try in range(21):
+    # Admission waits are not failed HTTP attempts. Fit pacing inside the normal
+    # read timeout while leaving five seconds for transport and response handling.
+    timeout = os.environ.get("AIDEVOPS_GH_READ_TIMEOUT", "15")
+    timeout = int(timeout) if timeout.isdecimal() else 15
+    deadline = time.monotonic() + min(10, max(0, timeout - 5))
+    while True:
         try:
             return budget.acquire(resource)
         except Deferred as pause:
-            if not pause.retryable or admission_try == 20:
+            wait = max(0.1, pause.retry_at - time.time()) if pause.retry_at else 0.1
+            if not pause.retryable or wait > deadline - time.monotonic():
                 raise
-            time.sleep(0.1)
+            time.sleep(wait)
 
 
 def _copy_response(output, include: bool, silent: bool, status: int, body_offset: int) -> int:
@@ -235,7 +240,10 @@ def run(metadata: Path, executable: str, args: list[str]) -> int:
             metadata.write_text(json.dumps(result), encoding="utf-8")
             return _exit_status(rc)
     except Deferred as exc:
-        print(f"[gh-transport] deferred: {exc}", file=sys.stderr)
+        metadata.write_text(json.dumps({"attempted": False, "deferred_by": "local_admission",
+                                       "reason": str(exc), "retry_at": exc.retry_at}), encoding="utf-8")
+        retry = f" retry_at={exc.retry_at:.3f}" if exc.retry_at else ""
+        print(f"[gh-transport] deferred: {exc}{retry}", file=sys.stderr)
         return 75
     except (OSError, ValueError, sqlite3.Error):
         # Metadata failure after execution is not permission to retry a
