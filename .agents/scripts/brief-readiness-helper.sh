@@ -244,6 +244,56 @@ _has_executable_verification() {
 	return 1
 }
 
+# Pure producer transformation: consume only structurally visible declarations.
+# Existing scope is never rewritten, including when it needs author-side repair.
+cmd_scope() {
+	local action="$1"
+	local body="$2"
+	local visible=""
+	visible=$(_unfenced_brief_text "$(_visible_brief_text "$body")")
+	printf '%s\n' "$visible" | python3 "$SCRIPT_DIR/brief_scope.py" \
+		"$action" "$body" "$(_unfenced_brief_text "$body")"
+	return $?
+}
+
+# Explicit authoring operation, never called by read-only composition/sync.
+# Require an existing regular task brief inside a linked authoring worktree.
+cmd_prepare_scope() {
+	local brief="$1"
+	local root="" body="" prepared=""
+	root=$(git -C "$(dirname "$brief")" rev-parse --show-toplevel) || return 1
+	[[ -f "$root/.git" ]] || { log_error "Scope preparation requires a linked worktree"; return 1; }
+	body=$(<"$brief")
+	prepared=$(cmd_scope normalize "$body") || return 1
+	python3 -c '
+import os
+from pathlib import Path
+import stat
+import sys
+import tempfile
+
+root, name, before, after = sys.argv[1:]
+path = Path(os.path.abspath(name))
+expected = Path(root) / "todo" / "tasks"
+if path.parent != expected or path.resolve() != path or not path.name.endswith("-brief.md"):
+    sys.exit("Scope preparation requires a non-symlink local task brief")
+if not path.is_file() or path.read_text().rstrip("\n") != before:
+    sys.exit("Brief changed during preparation; retry from current author-owned content")
+if before == after:
+    sys.exit(0)
+fd, temporary = tempfile.mkstemp(prefix=".scope-", dir=expected)
+try:
+    with os.fdopen(fd, "w") as output:
+        os.fchmod(output.fileno(), stat.S_IMODE(path.stat().st_mode))
+        output.write(after + "\n")
+    os.replace(temporary, path)
+finally:
+    if os.path.exists(temporary):
+        os.unlink(temporary)
+' "$root" "$brief" "$body" "$prepared"
+	return $?
+}
+
 _validate_v2_body() {
 	local -a _args=("$@")
 	local body="${_args[0]}"
@@ -268,6 +318,7 @@ _validate_v2_body() {
 	verification=$(_extract_markdown_section "$visible" "### Verification Before Dispatch" "$BRIEF_BOOL_TRUE")
 	acceptance=$(_extract_markdown_section "$visible" "## Acceptance Criteria")
 
+	cmd_scope check "$body" >/dev/null 2>&1 || errors="${errors}files-scope:canonical;"
 	_has_file_target "$files_to_modify" || errors="${errors}files-to-modify:target;"
 	_has_implementation_step "$implementation_steps" || errors="${errors}implementation-steps:substantive;"
 
@@ -573,6 +624,9 @@ brief-readiness-helper.sh — Detect worker-ready issue bodies (t2417)
 Usage:
   check <issue-number> <slug>           Score an issue body for worker-readiness
   check --body <body-text>              Score inline body text
+  scope-check <body-text>               Validate canonical exact-path scope
+  scope-normalize <body-text>           Print canonical scope from explicit declarations
+  prepare-scope <brief-path>            Persist scope in an authoring linked worktree
   stub  <task-id> <issue> <slug> [path] Capture full body/provenance, create-only
   similarity <brief-path> --body <text> Compare brief vs issue body overlap (%)
   help                                  Show this help
@@ -599,6 +653,9 @@ main() {
 	local -a _rest=("${_main_args[@]:1}")
 
 	case "$cmd" in
+	prepare-scope) cmd_prepare_scope "${_rest[0]:-}" ;;
+	scope-check) cmd_scope check "${_rest[0]:-}" ;;
+	scope-normalize) cmd_scope normalize "${_rest[0]:-}" ;;
 	check)      cmd_check "${_rest[@]}" ;;
 	stub)       cmd_stub "${_rest[@]}" ;;
 	similarity) cmd_similarity "${_rest[@]}" ;;
