@@ -201,6 +201,51 @@ _isc_read_claim_metadata() {
 	return 0
 }
 
+# Validate a supplied existing worktree before claim writes. Empty/nonexistent
+# paths retain the established deferred-worktree claim contract.
+_isc_validate_worktree_origin() {
+	local slug="$1" worktree="$2" origin=""
+	[[ -n "$worktree" && -d "$worktree" ]] || return 0
+	origin=$(git -C "$worktree" remote get-url origin 2>/dev/null) || origin=""
+	origin=${origin%.git}
+	case "$origin" in
+	"https://github.com/${slug}" | "git@github.com:${slug}" | "ssh://git@github.com/${slug}" | "ssh://git@github.com:22/${slug}") return 0 ;;
+	*)
+		_isc_err "claim: supplied worktree origin does not match the target; no claim written"
+		return 1
+		;;
+	esac
+}
+
+# Normalize only the preserved PR in the verified implementing worktree. The
+# original signed body/comments remain the immutable creation audit trail.
+_isc_normalize_owned_pr() {
+	local issue="$1" slug="$2" worktree="$3" user="$4"
+	local branch="" prs="" pr="" metadata=""
+	[[ -n "$worktree" && -d "$worktree" ]] || return 0
+	_isc_validate_worktree_origin "$slug" "$worktree" || return 1
+	branch=$(git -C "$worktree" symbolic-ref --short HEAD 2>/dev/null) || return 1
+	#aidevops:trust-boundary — independently verify authority and current sole
+	# ownership; a stale PR origin label never substitutes for either check.
+	_isc_can_manage_issue_state "$slug" "$user" || return 1
+	metadata=$(_isc_read_claim_metadata "$issue" "$slug") || return 1
+	jq -e --arg user "$user" '
+		.state == "OPEN" and ([.assignees[].login] == [$user]) and
+		([.labels[].name] | index("status:in-review") != null)
+	' <<<"$metadata" >/dev/null || return 1
+	prs=$(gh pr list --repo "$slug" --head "$branch" --state open \
+		--json number,isCrossRepository,closingIssuesReferences 2>/dev/null) || return 1
+	[[ "$(jq 'length' <<<"$prs")" == 0 ]] && return 0
+	pr=$(jq -er --argjson issue "$issue" '
+		select(length == 1) | .[0] | select(.isCrossRepository == false) |
+		select([.closingIssuesReferences[].number] == [$issue]) | .number
+	' <<<"$prs") || return 1
+	[[ "$(_isc_read_claim_metadata "$issue" "$slug")" == "$metadata" ]] || return 1
+	gh pr edit "$pr" --repo "$slug" --add-label origin:interactive \
+		--remove-label origin:worker --remove-label origin:worker-takeover >/dev/null || return 1
+	return 0
+}
+
 # Compatibility label probe used by release paths and focused regression tests.
 # Claim acquisition intentionally uses the richer ownership metadata above.
 _isc_has_in_review() {

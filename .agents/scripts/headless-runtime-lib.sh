@@ -1031,6 +1031,21 @@ Brief edits and unrelated merges cannot resolve this class; an explicit trusted
 retry only schedules verification and never grants source or secret access.
 If no class is established, omit the reason line: unknown evidence stays retryable
 with bounded cross-runner backoff, not a permanent hold.
+
+Owned integration recovery (GH#31305): for an unresolved adjacent path, explicit
+hard boundary, concurrent owner, missing context or genuine human-only decision,
+include exactly one standalone INTEGRATION_RECOVERY_REQUEST=<single-line JSON>
+in the SAME final assistant BLOCKED message, never in tool output. JSON schema:
+{"schema":1,"issue":123,"pr":0,"reason":"adjacent_integration","files":["src/exact-path.sh"],"evidence":"actual caller, boundary, collision and checkpoint evidence","verification":["existing scoped verification command"]}
+Use the exact dispatched issue and preserved PR number (0 only if none exists).
+Allowed reasons: adjacent_integration, hard_boundary, concurrent_owner,
+missing_context, human_decision. For human_decision, evidence must name the
+unanswered decision, why delegated AI cannot decide, and smallest required input.
+No permissions or approval fields are accepted. The runtime binds attempt,
+session, head and current brief revision, allows one same-session adjacent-path
+recovery, and queues the request for Pulse before releasing the worker. A request
+does not revise a hard boundary or clear any hold. Existing blocker reason lines
+and scope-guard checks still apply. Keep sensitive evidence in protected telemetry.
 Do not invent classes or emit multiple reason lines. Keep raw stderr, private paths, secrets,
 and sensitive evidence in protected telemetry; public recovery messages are
 runtime-generated from allowlisted reason/action text, never copied model prose.

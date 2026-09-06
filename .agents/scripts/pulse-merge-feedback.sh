@@ -627,6 +627,7 @@ _transition_issue_for_redispatch() {
 	local clear_hold="${4:-0}"
 	local companion_source_label="${5:-}"
 	local _assignees=""
+	_feedback_route_owner_allows "$linked_issue" "$repo_slug" || return "${PULSE_FEEDBACK_ROUTE_DEFERRED_RC:-75}"
 	_assignees=$(gh issue view "$linked_issue" --repo "$repo_slug" --json assignees --jq '.assignees[].login' 2>/dev/null) || _assignees=""
 
 	local -a _redispatch_flags=(
@@ -645,6 +646,9 @@ _transition_issue_for_redispatch() {
 		_redispatch_flags+=(--remove-label "hold-for-review")
 	fi
 
+	# Recheck after collecting assignees/flags, immediately before the write. A
+	# claim arriving during that read must not be removed by stale routing state.
+	_feedback_route_owner_allows "$linked_issue" "$repo_slug" || return "${PULSE_FEEDBACK_ROUTE_DEFERRED_RC:-75}"
 	if declare -F set_issue_status >/dev/null 2>&1; then
 		if ! set_issue_status "$linked_issue" "$repo_slug" "available" \
 			--add-label "$source_label" "${_redispatch_flags[@]}" >/dev/null 2>&1; then

@@ -148,6 +148,7 @@ _isc_refresh_existing_claim() {
 	if [[ "$defer_comment" -eq 0 && -n "$worktree_path" && -z "$existing_worktree_path" ]]; then
 		_isc_post_claim_comment "$issue" "$slug" "$user" "$worktree_path"
 	fi
+	_isc_normalize_owned_pr "$issue" "$slug" "$refreshed_worktree_path" "$user" || return 1
 	return 0
 }
 
@@ -212,6 +213,7 @@ _isc_apply_new_claim() {
 	if [[ "$defer_comment" -eq 0 || -n "$worktree_path" ]]; then
 		_isc_post_claim_comment "$issue" "$slug" "$user" "$worktree_path"
 	fi
+	_isc_normalize_owned_pr "$issue" "$slug" "$worktree_path" "$user" || return 1
 	return 0
 }
 
@@ -252,7 +254,7 @@ _isc_handle_existing_claim_ownership() {
 	own)
 		_isc_info "claim: #$issue already belongs to $user — refreshing stamp"
 		_isc_refresh_existing_claim "$issue" "$slug" "$worktree_path" "$user" "$defer_comment"
-		return 0
+		return $?
 		;;
 	foreign-interactive:*)
 		_isc_err "claim: #$issue has a live interactive owner @${ownership_class#*:}; refusing takeover"
@@ -335,6 +337,7 @@ _isc_cmd_claim() {
 		_isc_err "claim: interactive issue implementation requires --implementing; refusing worker-claim routing"
 		return 2
 	fi
+	_isc_validate_worktree_origin "$slug" "$worktree_path" || return 1
 
 	local user
 	if ! user=$(_isc_resolve_manageable_user "claim" "$issue" "$slug" \
