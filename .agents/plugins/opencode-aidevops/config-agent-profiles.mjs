@@ -9,6 +9,10 @@ import { isAbsolute, join, relative, resolve, sep } from "path";
 import { loadAgentIndex } from "./agent-loader.mjs";
 import { getOnDemandMcpAgents } from "./mcp-registry.mjs";
 import { DEFAULT_ESCALATION_ORDER, normalizeRoutingTier } from "./model-routing.mjs";
+import { recordPluginHealthStage } from "./plugin-health.mjs";
+import { primaryDeliveryEvidence } from "./primary-delivery-evidence.mjs";
+
+export { primaryDeliveryEvidence } from "./primary-delivery-evidence.mjs";
 
 const ROUTING_TIER_METADATA = "aidevops_model_tier";
 
@@ -177,6 +181,9 @@ export function registerOnDemandMcpAgents(config, agentsDir, routing, state) {
 }
 
 export function registerAgents(config, agentsDir, routing, state) {
+  if (process.env.AIDEVOPS_PLUGIN_HEALTH_PROBE_FILE) {
+    recordPluginHealthStage("primary_delivery", primaryDeliveryEvidence(config, agentsDir));
+  }
   registerConfiguredRoutingIntents(config, routing, state);
   const indexAgents = loadAgentIndex(agentsDir, readIfExists);
   let injected = 0;

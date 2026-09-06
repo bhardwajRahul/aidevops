@@ -46,7 +46,7 @@ def _update_opencode_agents(config, sorted_agents_local, primary_agents_local):
         print("  (agents directory may be empty or deploy incomplete)", file=sys.stderr)
         return
     apply_disabled_agents(sorted_agents_local)
-    config['agent'] = sorted_agents_local
+    config['agent'] = {**config.get('agent', {}), **sorted_agents_local}
     config['default_agent'] = "Build+"
 
 
@@ -154,7 +154,7 @@ def output_opencode_json():
         print(f"  Subagent filtering: {subagent_filtered_count} agents have permission.task rules")
     prompt_count = sum(1 for name, cfg in sorted_agents.items() if "prompt" in cfg)
     if prompt_count > 0:
-        print(f"  Custom system prompts: {prompt_count} agents use prompts/build.txt")
+        print(f"  Canonical source prompts: {prompt_count} primary agents")
 
 
 def _build_hook_entry():
