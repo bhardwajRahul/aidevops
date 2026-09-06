@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.326] - 2026-09-06
+
+### Fixed
+
+- handle Playwriter blank bootstrap safely
+
 ## [3.32.325] - 2026-09-06
 
 ### Fixed
