@@ -10,6 +10,7 @@ import {
   selectConnectedRoutingCandidate,
 } from "./model-routing.mjs";
 import { loadDelegatedDomainKnowledge } from "./agent-loader.mjs";
+import { SPECIALIST_ADVISOR, validateSpecialistRequest } from "./specialist-advisor.mjs";
 
 const DOMAIN_KNOWLEDGE_MARKER = "\n\n[AIDEvOps canonical domain knowledge]";
 const DOMAIN_REQUIRED_FIELDS = ["task", "objective", "scope", "source", "decisions", "evidence", "output"];
@@ -92,6 +93,13 @@ async function applyConnectedRoutingModel(context, route, message, policy) {
   policy.candidateIndex = routingCandidateIndex(context.modelRouting, route.effort, routedModel);
 }
 
+function applySpecialistPolicy(context, agentName, text, policy) {
+  if (agentName !== SPECIALIST_ADVISOR || !context.agentRoutingState?.specialistAdvisor) return;
+  validateSpecialistRequest(text);
+  policy.effort = "thinking";
+  policy.reason = "specialist_advice";
+}
+
 async function routeChatMessage(context, output) {
   const message = output?.message || {};
   const sessionID = message.sessionID;
@@ -125,6 +133,7 @@ async function routeChatMessage(context, output) {
     pinned: route.pinned,
     createdAt: now,
   };
+  applySpecialistPolicy(context, agentName, text, policy);
   context.policies.set(sessionID, policy);
 
   if (!context.modelRouting || route.pinned) return;
@@ -248,12 +257,14 @@ async function routeChatParams(context, input, output) {
     const policy = context.policies.get(sessionID);
     const desiredEffort = policy?.effort
       ?? context.inferSubagentEffort(input.message.agent ?? childSession.agent);
-    const requestedVariant = context.resolveTierReasoning(
-      desiredEffort,
-      input?.provider?.id,
-      input?.model?.id,
-      context.tierReasoning,
-    );
+    const requestedVariant = policy?.reason === "specialist_advice"
+      ? context.agentRoutingState.specialistAdvisor.variant
+      : context.resolveTierReasoning(
+        desiredEffort,
+        input?.provider?.id,
+        input?.model?.id,
+        context.tierReasoning,
+      );
     const effectiveVariant = await effectiveChildVariant(
       context,
       childSession,
