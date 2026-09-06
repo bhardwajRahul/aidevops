@@ -183,6 +183,45 @@ _release_lane_reclaim_same_source() {
 	return 0
 }
 
+#aidevops:trust-boundary
+# Check already-admitted host work before reserving a new lane. This snapshot
+# does not atomically fence GitHub; publication must still verify the exact tree.
+_release_lane_queue_preflight() {
+	local repo="$1"
+	local coordinated_repo="${AIDEVOPS_RELEASE_LANE_COORDINATED_REPO:-marcusquinn/aidevops}"
+	local pages=""
+	# shellcheck disable=SC2016 # GraphQL variables, not shell interpolation.
+	local query='query($owner:String!,$name:String!,$endCursor:String) {
+		repository(owner:$owner,name:$name) {
+			pullRequests(first:100,after:$endCursor,states:OPEN,baseRefName:"main") {
+				nodes { number autoMergeRequest { enabledAt } mergeQueueEntry { id } }
+				pageInfo { hasNextPage endCursor }
+			}
+		}
+	}'
+	[[ "$repo" == "$coordinated_repo" ]] || return 0
+	pages=$(gh api graphql --paginate --slurp -f query="$query" \
+		-f owner="${repo%%/*}" -f name="${repo#*/}" 2>/dev/null) || {
+		printf 'Cannot verify admitted GitHub merge work; release reservation deferred\n' >&2
+		return 75
+	}
+	if ! jq -e '
+		type == "array" and length > 0
+		and all(.[]; (.errors // [] | length) == 0
+			and (.data.repository.pullRequests.nodes | type) == "array"
+			and (.data.repository.pullRequests.pageInfo.hasNextPage | type) == "boolean"
+			and all(.data.repository.pullRequests.nodes[];
+				(.number | type) == "number" and has("autoMergeRequest") and has("mergeQueueEntry")))
+		and .[-1].data.repository.pullRequests.pageInfo.hasNextPage == false
+		and all(.[] | .data.repository.pullRequests.nodes[];
+			.autoMergeRequest == null and .mergeQueueEntry == null)
+	' <<<"$pages" >/dev/null; then
+		printf 'Queued or unverifiable GitHub merge work; release reservation deferred (no queue mutation)\n' >&2
+		return 75
+	fi
+	return 0
+}
+
 release_lane_acquire() {
 	local repo="$1"
 	local source_pr="$2"
@@ -219,6 +258,7 @@ release_lane_acquire() {
 	2) _AIDEVOPS_RELEASE_LANE_HEAD="" ;;
 	*) return 1 ;;
 	esac
+	_release_lane_queue_preflight "$repo" || return $?
 	now=$(date -u '+%Y-%m-%dT%H:%M:%SZ') || return 1
 	operation_token="${_AIDEVOPS_RELEASE_LANE_TOKEN_PREFIX}$(date +%s)-$$-${RANDOM:-0}"
 	state_json=$(jq -cn --arg repo "$repo" --argjson source_pr "$source_pr" --arg expected_sources "$expected_sources" \
@@ -894,7 +934,6 @@ release_lane_merge_guard() {
 	local phase=""
 	local source_pr=""
 	local tag_name=""
-	local terminal_receipt=""
 
 	[[ "$repo" == "$coordinated_repo" && "$base_ref" == "main" ]] || return 0
 	[[ "$pr_number" =~ ^[0-9]+$ ]] || return 1
@@ -909,14 +948,21 @@ release_lane_merge_guard() {
 	esac
 	active=$(jq -r '.active' <<<"$_AIDEVOPS_RELEASE_LANE_JSON") || return 1
 	phase=$(jq -r '.phase' <<<"$_AIDEVOPS_RELEASE_LANE_JSON") || return 1
-	terminal_receipt=$(jq -r 'if .terminal_receipt == null then "" elif (.terminal_receipt | type) == "string" then .terminal_receipt else .terminal_receipt.status // "" end' \
-		<<<"$_AIDEVOPS_RELEASE_LANE_JSON") || return 1
-	if [[ "$active" == "false" || "$phase" == "terminal" || "$terminal_receipt" == "published" || "$terminal_receipt" == "superseded" || "$terminal_receipt" == "recovered" ]]; then
+	#aidevops:trust-boundary
+	# Ownership, not a stale receipt or phase label, releases the merge fence.
+	# Fence from reservation onwards, including preparation and reconciliation.
+	# This is an admission check, not a host-side lock: pre-existing native queues
+	# still require exact-tree publication checks and authorized aggregation recovery.
+	# See reference/release-lane-coordination.md for the bounded recovery contract.
+	if [[ "$active" == "false" ]]; then
 		return 0
 	fi
 	case "$phase" in
-	remote-publication | exact-tag-deployment | "$_AIDEVOPS_RELEASE_LANE_PHASE_AGGREGATION_RECOVERY" | "$_AIDEVOPS_RELEASE_LANE_PHASE_AGGREGATION_REFRESH" | "$_AIDEVOPS_RELEASE_LANE_PHASE_AGGREGATE_COMMIT" | "$_AIDEVOPS_RELEASE_LANE_PHASE_RESERVED_REFRESH" | "$_AIDEVOPS_RELEASE_LANE_PHASE_SUCCESSOR_PREPARING") ;;
-	*) return 0 ;;
+	reserved | preparing | reconcile-required | remote-publication | exact-tag-deployment | "$_AIDEVOPS_RELEASE_LANE_PHASE_AGGREGATION_RECOVERY" | "$_AIDEVOPS_RELEASE_LANE_PHASE_AGGREGATION_REFRESH" | "$_AIDEVOPS_RELEASE_LANE_PHASE_AGGREGATE_COMMIT" | "$_AIDEVOPS_RELEASE_LANE_PHASE_RESERVED_REFRESH" | "$_AIDEVOPS_RELEASE_LANE_PHASE_SUCCESSOR_PREPARING") ;;
+	*)
+		printf 'Cannot authorize merge for active release lane phase=%s\n' "$phase" >&2
+		return 75
+		;;
 	esac
 	source_pr=$(jq -r '.source_pr' <<<"$_AIDEVOPS_RELEASE_LANE_JSON") || return 1
 	tag_name=$(jq -r '.tag // ""' <<<"$_AIDEVOPS_RELEASE_LANE_JSON") || return 1
