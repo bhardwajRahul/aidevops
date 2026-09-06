@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.323] - 2026-09-06
+
+### Fixed
+
+- admit unchanged dispatch targets from lagging mirrors
+
 ## [3.32.322] - 2026-09-06
 
 ### Added
