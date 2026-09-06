@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.329] - 2026-09-06
+
+### Fixed
+
+- Reuse fresh REST evidence for Pulse admission
+
 ## [3.32.328] - 2026-09-06
 
 ### Fixed
