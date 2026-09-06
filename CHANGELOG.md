@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.322] - 2026-09-06
+
+### Added
+
+- Add opt-in Astra 240K compaction budget
+
 ## [3.32.321] - 2026-09-06
 
 ### Fixed
