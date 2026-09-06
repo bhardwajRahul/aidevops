@@ -60,6 +60,10 @@ import { createSessionRecoveryMarkerHandler } from "./session-recovery-marker.mj
 import { createSessionStallRecovery } from "./session-stall-recovery.mjs";
 import { createPermissionBroker } from "./permission-broker.mjs";
 import { createSubagentCancellationReceipt } from "./subagent-cancellation-receipt.mjs";
+import {
+  BoundedInteractiveOperationManager,
+} from "./bounded-interactive-operation.mjs";
+import { createOutputSandboxRecorder } from "./bounded-operation-output.mjs";
 import { createRoutingFeedbackHandler } from "./routing-feedback-handler.mjs";
 import { createSessionBoundaryAdvisory } from "./session-boundary-advisory.mjs";
 import { createProviderErrorHandler } from "./provider-error-diagnostics.mjs";
@@ -286,6 +290,13 @@ function prepareLocalProviderProxies(client) {
 // Main Plugin Export
 // ---------------------------------------------------------------------------
 
+function applyBoundedOperationPermission(config) {
+  if (!config.permission || typeof config.permission !== "object") config.permission = {};
+  if (config.permission["*"] !== "deny" && config.permission.aidevops_bounded_operation === undefined) {
+    config.permission.aidevops_bounded_operation = "ask";
+  }
+}
+
 /**
  * aidevops OpenCode Plugin
  *
@@ -372,6 +383,11 @@ export async function AidevopsPlugin({ directory, client }) {
   // Create tools
   // Use the module-load capture so later plugin factories cannot inherit the
   // global OAuth fetch wrapper from an earlier OpenCode workspace.
+  const boundedOperationManager = new BoundedInteractiveOperationManager({
+    projectRoot: directory,
+    recordOutput: createOutputSandboxRecorder(join(SCRIPTS_DIR, "output-sandbox-helper.sh")),
+  });
+  process.once("exit", () => boundedOperationManager.dispose());
   const baseTools = createTools(SCRIPTS_DIR, run, {
     sessionOrigin: process.env.AIDEVOPS_SESSION_ORIGIN,
     poolToolFactory: () => createPoolTool(client),
@@ -383,6 +399,7 @@ export async function AidevopsPlugin({ directory, client }) {
     mcpDirectory: directory,
     managedMcpNames: getOnDemandMcpAgents().map((mcp) => mcp.name),
     managedMcpWorkspaces: mcpRuntime.workspaces,
+    boundedOperationManager,
   });
 
   // Create hooks from extracted modules
@@ -581,6 +598,7 @@ export async function AidevopsPlugin({ directory, client }) {
       // the config hook can complete and the session becomes responsive.
       initPoolAuth(client).catch(() => {});
       const result = await configHook(config);
+      applyBoundedOperationPermission(config);
       recordPluginHealthStage("config_applied", {
         gpt56_limits: config.provider?.openai?.models?.["gpt-5.6-sol"]?.limit || null,
         terminal_title_status: true,
@@ -643,6 +661,7 @@ export async function AidevopsPlugin({ directory, client }) {
         Promise.resolve(subagentEffortHooks.handleEvent(input)),
         compactionContinuation.handleEvent(input),
         Promise.resolve(cancellationReceipt.handleEvent(input)),
+        Promise.resolve(boundedOperationManager.handleEvent(input)),
         permissionBroker.handleEvent(input).catch((err) => debugEventError("permission broker", err)),
         sessionTitleStatusHandler(input).catch((err) => debugEventError("title status handler", err)),
         routingFeedbackHandler(input).catch((err) => debugEventError("routing feedback handler", err)),
