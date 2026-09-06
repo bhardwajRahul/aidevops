@@ -10,6 +10,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.324] - 2026-09-06
+
+### Added
+
+- bounded canonical domain delegation profiles (#31400)
+
+### Changed
+
+- Maintenance: aggregate verified maintainer review release sources
+- Maintenance: mark t18411 complete (pr:#31399 completed:2026-09-06) (#31397)
+- Maintenance: mark t18407 complete (pr:#31388 completed:2026-09-06) (#31389)
+
+### Fixed
+
+- report detached recovery claims accurately
+- validate untracked whitespace before staging
+- order terminal blocker retries by timestamp and comment ID (#31414)
+- defer unavailable author metadata without label mutations (#31415)
+- deduplicate Claude proxy framework context (#31395)
+- make session handoffs actionable (#31396)
+- deduplicate README inventory fixtures (#31393)
+- fence merges from release reservation (#31385)
+- scope pending runtime risk to branch-owned changes (#31391)
+- validate domain discovery views (#31388)
+
 ## [3.32.323] - 2026-09-06
 
 ### Fixed
