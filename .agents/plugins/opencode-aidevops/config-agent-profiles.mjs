@@ -6,13 +6,14 @@
 import { existsSync, readFileSync, realpathSync } from "fs";
 import { homedir } from "os";
 import { isAbsolute, join, relative, resolve, sep } from "path";
-import { loadAgentIndex } from "./agent-loader.mjs";
+import { loadAgentIndex, registerDelegatedDomainProfiles } from "./agent-loader.mjs";
 import { getOnDemandMcpAgents } from "./mcp-registry.mjs";
 import { DEFAULT_ESCALATION_ORDER, normalizeRoutingTier } from "./model-routing.mjs";
 import { recordPluginHealthStage } from "./plugin-health.mjs";
 import { primaryDeliveryEvidence } from "./primary-delivery-evidence.mjs";
 
 export { primaryDeliveryEvidence } from "./primary-delivery-evidence.mjs";
+export { registerDelegatedDomainProfiles } from "./agent-loader.mjs";
 
 const ROUTING_TIER_METADATA = "aidevops_model_tier";
 
@@ -199,6 +200,7 @@ export function registerAgents(config, agentsDir, routing, state) {
     registerAgentRoutingIntent(state, agent.name, config.agent[agent.name], agent.modelTier, routing);
   });
   return injected
+    + registerDelegatedDomainProfiles(config, agentsDir, state)
     + registerOnDemandMcpAgents(config, agentsDir, routing, state)
     + registerBuiltInRoutedAgents(config, routing, state);
 }
