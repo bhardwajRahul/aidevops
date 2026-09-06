@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.321] - 2026-09-06
+
+### Fixed
+
+- preserve quota blockers in Pulse cycle health
+
 ## [3.32.320] - 2026-09-06
 
 ### Changed
