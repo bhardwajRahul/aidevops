@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.328] - 2026-09-06
+
+### Fixed
+
+- fix approved manifest lookup across linked worktrees
+- preserve public contracts and consolidation holds
+- keep missing-config secretlint scans read-only
+
 ## [3.32.327] - 2026-09-06
 
 ### Changed
