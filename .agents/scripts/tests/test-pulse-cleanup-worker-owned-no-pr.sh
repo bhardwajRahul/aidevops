@@ -1042,6 +1042,51 @@ test_terminal_pr_identity_and_policy_guards() {
 	return 0
 }
 
+test_abandoned_profile_publication_is_archived_recoverably() {
+	local repo_dir="${TEST_ROOT}/profile-repo"
+	local wt_path="${TEST_ROOT}/profile-repo-profile-readme-20260901000000-123-456"
+	local recovery_root="${TEST_ROOT}/profile-recovery"
+	local git_dir=""
+	local common_dir=""
+	local canonical_head=""
+	local resolved_wt_path=""
+	local old_ts=""
+
+	mkdir -p "$repo_dir"
+	git -C "$repo_dir" init -q -b main
+	git -C "$repo_dir" config user.email "test@example.invalid"
+	git -C "$repo_dir" config user.name "Test Profile"
+	printf 'base\n' >"${repo_dir}/README.md"
+	git -C "$repo_dir" add README.md
+	git -C "$repo_dir" commit -q -m init
+	git -C "$repo_dir" worktree add -q --detach "$wt_path" main
+	printf 'recoverable generated state\n' >"${wt_path}/profile.tmp"
+	git_dir=$(git -C "$wt_path" rev-parse --path-format=absolute --git-dir)
+	resolved_wt_path=$(cd "$wt_path" && pwd -P)
+	common_dir=$(git -C "$repo_dir" rev-parse --path-format=absolute --git-common-dir)
+	canonical_head=$(git -C "$repo_dir" rev-parse HEAD)
+	jq -n --arg path "$resolved_wt_path" --arg common "$common_dir" --arg head "$canonical_head" '
+		{schema:"aidevops-profile-publication/v1",producer:"profile-readme",worktree_path:$path,canonical_common_dir:$common,canonical_head:$head,created_epoch:1}
+	' >"${git_dir}/aidevops-profile-publication.json"
+	old_ts=$(date -u -v-3H +%Y%m%d%H%M 2>/dev/null || date -u -d '3 hours ago' +%Y%m%d%H%M)
+	touch -t "$old_ts" "$wt_path/.git"
+
+	AIDEVOPS_WORKTREE_TRASH_ROOT="$recovery_root"
+	ORPHAN_PROFILE_PUBLICATION_ARCHIVE_SECS=7200
+	export AIDEVOPS_WORKTREE_TRASH_ROOT ORPHAN_PROFILE_PUBLICATION_ARCHIVE_SECS
+	source_pulse_cleanup_with_stubs || return 1
+	local now_epoch=""
+	now_epoch=$(date +%s)
+	_cleanup_single_worktree "$repo_dir" "$wt_path" "" "$now_epoch" "testowner/testrepo" "main" >/dev/null 2>&1
+	local cleanup_rc=$?
+	local rc=0
+	[[ "$cleanup_rc" -eq 0 ]] || rc=1
+	[[ ! -d "$wt_path" && -d "$recovery_root" ]] || rc=1
+	grep -q 'profile-publication.*recoverable' "$AIDEVOPS_CLEANUP_LOG" 2>/dev/null || rc=1
+	print_result "abandoned marked profile publication is archived recoverably" "$rc" "cleanup_rc=$cleanup_rc"
+	return 0
+}
+
 TEST_ROOT=$(mktemp -d)
 trap teardown EXIT
 export HOME="${TEST_ROOT}/home"
@@ -1077,6 +1122,7 @@ test_no_newline_open_pr_output_blocks_clean_fastpath
 test_branch_pr_lookup_uses_null_safe_jq_filter
 test_branch_pr_lookup_treats_null_pr_number_as_no_pr
 test_terminal_pr_identity_and_policy_guards
+test_abandoned_profile_publication_is_archived_recoverably
 
 echo ""
 echo "Results: $((TESTS_RUN - TESTS_FAILED))/${TESTS_RUN} passed, ${TESTS_FAILED} failed."
