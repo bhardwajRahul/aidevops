@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.32.330] - 2026-09-07
+
+### Changed
+
+- Maintenance: prepare exact-tip maintainer release aggregation
+- Maintenance: aggregate verified maintainer batch release sources
+- Documentation: add Hostinger multisite cron readiness guidance (#31446)
+
+### Fixed
+
+- resume bounded cleanup after slow repository operations
+- bound binary review evidence
+- bound and validate source request record reads
+- fix source grant lifetime at human confirmation
+- scope legacy task mappings by repository identity
+
 ## [3.32.329] - 2026-09-06
 
 ### Fixed
