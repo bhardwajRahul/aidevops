@@ -10,17 +10,17 @@ This database coordinates local processes, not independently configured hosts.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import sqlite3
 import subprocess
-import sys
 import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
 from gh_transport_capacity import capacity_wait
+from gh_transport_identity import quota_owner
+from gh_transport_reconcile import reconcile_scope as _reconcile_scope
 from gh_transport_recovery import admission_status, mark_dead_reservations, probe_recovers, reserve_probe_allowed
 
 
@@ -42,10 +42,10 @@ def private_directory(path: Path) -> None:
     path.chmod(0o700)
 
 
-def scope_key(host: str) -> str:
+def scope_key(host: str, owner: str | None = None) -> str:
     # Only trusted launch context may name a quota owner. A credential digest is
     # not a quota owner: two PATs can spend the same user's allowance.
-    owner = os.environ.get("AIDEVOPS_GH_QUOTA_OWNER", "unresolved")
+    owner = quota_owner()[0] if owner is None else owner
     return hashlib.sha256(f"{host}\0{owner}".encode()).hexdigest()
 
 
@@ -80,7 +80,8 @@ def process_birth(pid: int) -> str:
 
 
 class Budget:
-    def __init__(self, directory: Path, scope: str, credential: str | None = None):
+    def __init__(self, directory: Path, scope: str, credential: str | None = None,
+                 *, attributed: bool = False):
         private_directory(directory)
         self.path = directory / "admission.sqlite3"
         if self.path.is_symlink():
@@ -93,8 +94,10 @@ class Budget:
             raise ValueError("transport state file is not owned by this user")
         self.path.chmod(0o600)
         self.db = sqlite3.connect(self.path, timeout=2, isolation_level=None)
+        requested_scope = scope
         self.scope = scope
         self.credential = credential or scope
+        self.attributed = False
         self.birth = process_birth(os.getpid())
         self.db.executescript("""
             CREATE TABLE IF NOT EXISTS quota (
@@ -121,9 +124,14 @@ class Budget:
                 scope TEXT NOT NULL, resource TEXT NOT NULL, reset REAL NOT NULL,
                 retry_at REAL NOT NULL, remaining INTEGER NOT NULL,
                 PRIMARY KEY(scope, resource));
+            CREATE TABLE IF NOT EXISTS reconciliation (
+                source TEXT PRIMARY KEY, owner TEXT NOT NULL, reconciled REAL NOT NULL);
         """)
         with self.transaction():
             self._bind_scope()
+        # A configured owner is authoritative only after its requested scope is
+        # canonical. A legacy owner->unresolved alias still needs reconciliation.
+        self.attributed = attributed and self.scope == requested_scope
 
     def _root(self, scope: str) -> str:
         for _ in range(256):
@@ -296,12 +304,14 @@ class Budget:
         self.db.close()
 
 
+def reconcile_scope(directory: Path, unresolved_scope: str, owner_scope: str,
+                    *, now: float | None = None) -> dict:
+    """Replace ambiguous local evidence with one attributed bootstrap boundary."""
+    private_directory(directory)
+    return _reconcile_scope(directory, unresolved_scope, owner_scope,
+                            context=(now, Deferred))
+
+
 if __name__ == "__main__":
-    if sys.argv[1:] != ["status"]:
-        raise SystemExit(2)
-    try:
-        print(json.dumps(admission_status(Path(os.environ.get(
-            "AIDEVOPS_GH_TRANSPORT_STATE_DIR", str(Path.home() / ".aidevops/state/gh-transport"),
-        )).absolute(), scope_key("github.com"))))
-    except (OSError, ValueError, sqlite3.Error):
-        print('{"state":"unknown"}')
+    from gh_transport_budget_cli import main
+    main()
